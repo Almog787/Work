@@ -1,70 +1,58 @@
 function main(workbook: ExcelScript.Workbook) {
   // קבלת הגיליון הפעיל
-  let selectedSheet = workbook.getActiveWorksheet();
-  
-  // קבלת הטווח המשומש בגיליון (כדי לא לרוץ על מיליון שורות סתם)
-  let usedRange = selectedSheet.getUsedRange();
-  
-  // אם הגיליון ריק, עצור
+  let sheet = workbook.getActiveWorksheet();
+  let usedRange = sheet.getUsedRange();
+
+  // אם הגיליון ריק לגמרי, צא מהפונקציה
   if (!usedRange) {
     return;
   }
 
-  // טעינת הערכים לזיכרון (מערך דו-ממדי) לביצועים מהירים
-  let values = usedRange.getValues();
-  let rowCount = values.length;
+  // מציאת אינדקס השורה האחרונה שיש בה נתונים בגיליון
+  let lastRowIndex = usedRange.getLastRow().getRowIndex();
   
-  // מציאת אינדקס העמודה שבה מתחיל הטווח (למקרה שהטבלה לא מתחילה ב-A1)
-  let startColIndex = usedRange.getColumnIndex();
-  let startRowIndex = usedRange.getRowIndex();
+  // חישוב כמה שורות צריך לקרוא (מסך הכל פחות שורת הכותרת הראשונה)
+  // אנו מתחילים משורה 2 (אינדקס 1), לכן הגובה הוא סך השורות פחות 1
+  let rowCount = lastRowIndex; 
 
-  // הגדרת מספרי העמודות (בסיס 0: A=0, B=1...)
-  // X = 23
-  // Y = 24
-  // AS = 44
-  // AT = 45
-  const colX_Index = 23;
-  const colY_Index = 24;
-  const colAS_Index = 44;
-  const colAT_Index = 45;
+  // אם יש רק כותרת או אין נתונים, עצור
+  if (rowCount < 1) {
+    return;
+  }
 
-  // לולאה העוברת על כל השורות בטווח
+  // --- שלב 1: קריאת נתונים ספציפיים לזיכרון ---
+
+  // קריאת עמודות X ו-Y (עמודות 23 ו-24 באינדקס 0)
+  // הפרמטרים: (שורת התחלה, עמודת התחלה, מספר שורות, מספר עמודות)
+  let sourceRange = sheet.getRangeByIndexes(1, 23, rowCount, 2);
+  let sourceValues = sourceRange.getValues();
+
+  // קריאת עמודות AS ו-AT (עמודות 44 ו-45 באינדקס 0)
+  let targetRange = sheet.getRangeByIndexes(1, 44, rowCount, 2);
+  let targetValues = targetRange.getValues();
+
+  // --- שלב 2: ביצוע הלוגיקה בזיכרון ---
+  
   for (let i = 0; i < rowCount; i++) {
-    // חישוב מספר השורה האמיתי באקסל
-    let realRowNumber = startRowIndex + i + 1;
+    // שליפת הערכים הנוכחיים (עבור קריאות הקוד)
+    // עמודה 0 במערך המקומי = X או AS
+    // עמודה 1 במערך המקומי = Y או AT
+    
+    let valAS = String(targetValues[i][0]); // הערך ב-AS
+    let valAT = String(targetValues[i][1]); // הערך ב-AT
+    
+    // בדיקה עבור עמודה AS (החלפה בערך מ-X)
+    if (valAS.toLowerCase().indexOf("z") !== -1) {
+      targetValues[i][0] = sourceValues[i][0]; // העתקת הערך מ-X
+    }
 
-    // אנחנו רוצים להתחיל רק משורה 2 ומטה
-    if (realRowNumber >= 2) {
-      
-      // חישוב האינדקס היחסי בתוך המערך 'values'
-      // (למקרה שהטווח לא מתחיל בעמודה A, אנו מחסרים את startColIndex)
-      let relativeColAS = colAS_Index - startColIndex;
-      let relativeColAT = colAT_Index - startColIndex;
-      let relativeColX = colX_Index - startColIndex;
-      let relativeColY = colY_Index - startColIndex;
-
-      // בדיקה אם העמודות הללו בכלל קיימות בטווח הנתונים שנמצא
-      if (relativeColAS >= 0 && relativeColAT < values[i].length) {
-        
-        // --- בדיקה עבור עמודה AS ---
-        let contentAS = String(values[i][relativeColAS]);
-        // בדיקה אם מכיל 'z' או 'Z'
-        if (contentAS.toLowerCase().indexOf("z") !== -1) {
-           // העתקה מ-X ל-AS
-           values[i][relativeColAS] = values[i][relativeColX];
-        }
-
-        // --- בדיקה עבור עמודה AT ---
-        let contentAT = String(values[i][relativeColAT]);
-        // בדיקה אם מכיל 'z' או 'Z'
-        if (contentAT.toLowerCase().indexOf("z") !== -1) {
-           // העתקה מ-Y ל-AT
-           values[i][relativeColAT] = values[i][relativeColY];
-        }
-      }
+    // בדיקה עבור עמודה AT (החלפה בערך מ-Y)
+    if (valAT.toLowerCase().indexOf("z") !== -1) {
+      targetValues[i][1] = sourceValues[i][1]; // העתקת הערך מ-Y
     }
   }
 
-  // כתיבת הערכים המעודכנים חזרה לאקסל בפעולה אחת (מהיר מאוד)
-  usedRange.setValues(values);
+  // --- שלב 3: כתיבת התוצאות חזרה לאקסל ---
+  // אנו כותבים חזרה רק את טווח המטרה (AS:AT) כי רק הוא השתנה
+  targetRange.setValues(targetValues);
 }
