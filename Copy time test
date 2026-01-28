@@ -1,0 +1,79 @@
+function main(
+  workbook: ExcelScript.Workbook, 
+  startRow: number, 
+  numberOfTests: number
+) {
+  // --- הגדרות ---
+  const sheet = workbook.getActiveWorksheet();
+  
+  // המרת מספר דקות לערך מספרי של אקסל (יממה = 1.0, דקה = 1/1440)
+  const ONE_MINUTE = 1.0 / 1440.0;
+  
+  // אינדקסים של עמודות (K=10, L=11 בבסיס 0)
+  const colK_Index = 10;
+  const colL_Index = 11;
+
+  // ודא שהשורה להתחלה היא לפחות 2 (כי צריך להסתמך על שורה קודמת)
+  if (startRow < 2) {
+    console.log("שגיאה: שורת ההתחלה חייבת להיות 2 ומעלה.");
+    return;
+  }
+
+  // --- שלב 1: קבלת הזמן ההתחלתי מהשורה הקודמת ---
+  // אנו ניגשים לשורה שלפני שורת ההתחלה, עמודה L (סיום בדיקה קודמת)
+  // הערה: באקסל שורה 5 היא אינדקס 4. לכן השורה הקודמת היא startRow - 2
+  let prevRowIndex = startRow - 2;
+  
+  let previousEndTimeVal = sheet.getRangeByIndexes(prevRowIndex, colL_Index, 1, 1).getValue();
+  
+  // משתנה שיחזיק את הזמן הנוכחי לחישוב (מספר עשרוני של אקסל)
+  let currentBaseTime: number;
+
+  // בדיקה אם יש ערך תקין בשורה הקודמת
+  if (typeof previousEndTimeVal === 'number') {
+    currentBaseTime = previousEndTimeVal;
+  } else {
+    // אם התא הקודם ריק או לא מכיל מספר, ננסה לקחת מעמודה K של אותה שורה, או שנתחיל מ-8:00 בבוקר כברירת מחדל
+    // כדי למנוע קריסה
+    console.log("לא נמצא זמן סיום בשורה הקודמת. משתמש בזמן ברירת מחדל (08:00).");
+    currentBaseTime = 8.0 / 24.0; // 08:00
+  }
+
+  // הכנת מערך לנתונים החדשים (מערך דו-ממדי: עמודה K ועמודה L)
+  let newValues: (string | number | boolean)[][] = [];
+
+  // --- שלב 2: לולאת חישוב הזמנים ---
+  for (let i = 0; i < numberOfTests; i++) {
+    
+    // 1. חישוב הפסקה (Gap): בין 0 ל-3 דקות
+    // Math.random() * 4 נותן 0 עד 3.999 -> floor נותן 0, 1, 2, 3
+    let gapMinutes = Math.floor(Math.random() * 4);
+    
+    // חישוב זמן התחלה (K) = זמן סיום קודם + הפסקה
+    let startTime = currentBaseTime + (gapMinutes * ONE_MINUTE);
+    
+    // 2. חישוב משך בדיקה (Duration): בין 2 ל-4 דקות
+    // טווח: (מקסימום - מינימום + 1) + מינימום -> (4-2+1)+2 = 3+2
+    let durationMinutes = Math.floor(Math.random() * 3) + 2;
+    
+    // חישוב זמן סיום (L) = זמן התחלה + משך בדיקה
+    let endTime = startTime + (durationMinutes * ONE_MINUTE);
+
+    // הוספה למערך
+    newValues.push([startTime, endTime]);
+
+    // עדכון זמן הבסיס לאיטרציה הבאה (הסיום של הנוכחית)
+    currentBaseTime = endTime;
+  }
+
+  // --- שלב 3: כתיבת הנתונים לגיליון ---
+  // הגדרת הטווח לכתיבה: משורת ההתחלה, עמודה K, למשך מס' השורות, רוחב 2 עמודות
+  let targetRange = sheet.getRangeByIndexes(startRow - 1, colK_Index, numberOfTests, 2);
+  
+  targetRange.setValues(newValues);
+
+  // --- שלב 4: עיצוב התאים כשעה (hh:mm) ---
+  targetRange.setNumberFormatLocal("hh:mm");
+
+  console.log(`בוצע בהצלחה: נוצרו ${numberOfTests} רשומות החל משורה ${startRow}.`);
+}
