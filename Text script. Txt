@@ -1,58 +1,56 @@
 function main(workbook: ExcelScript.Workbook) {
-  // קבלת הגיליון הפעיל
-  let sheet = workbook.getActiveWorksheet();
-  let usedRange = sheet.getUsedRange();
+  const sheet = workbook.getActiveWorksheet();
+  const usedRange = sheet.getUsedRange();
 
-  // אם הגיליון ריק לגמרי, צא מהפונקציה
-  if (!usedRange) {
-    return;
-  }
+  if (!usedRange) return;
 
-  // מציאת אינדקס השורה האחרונה שיש בה נתונים בגיליון
-  let lastRowIndex = usedRange.getLastRow().getRowIndex();
+  // חישוב גודל הטווח
+  const lastRowIndex = usedRange.getLastRow().getRowIndex();
+  const rowCount = lastRowIndex; // מתחילים משורה 2 (מדלגים על כותרת)
+
+  if (rowCount < 1) return;
+
+  // קריאת העמודות הרלוונטיות בלבד לזיכרון
+  // X=23, Y=24 | AS=44, AT=45
+  const sourceRange = sheet.getRangeByIndexes(1, 23, rowCount, 2);
+  const targetRange = sheet.getRangeByIndexes(1, 44, rowCount, 2);
+
+  // טעינת הערכים (פעולת קריאה מהשרת)
+  const sourceValues = sourceRange.getValues();
+  const targetValues = targetRange.getValues();
+
+  // הגדרת ביטוי רגולרי לחיפוש האות z (הדגל 'i' אומר להתעלם מאותיות גדולות/קטנות)
+  const zPattern = /z/i;
   
-  // חישוב כמה שורות צריך לקרוא (מסך הכל פחות שורת הכותרת הראשונה)
-  // אנו מתחילים משורה 2 (אינדקס 1), לכן הגובה הוא סך השורות פחות 1
-  let rowCount = lastRowIndex; 
+  // משתנה עזר כדי לדעת אם בכלל צריך לשמור בסוף
+  let hasChanges = false;
 
-  // אם יש רק כותרת או אין נתונים, עצור
-  if (rowCount < 1) {
-    return;
-  }
-
-  // --- שלב 1: קריאת נתונים ספציפיים לזיכרון ---
-
-  // קריאת עמודות X ו-Y (עמודות 23 ו-24 באינדקס 0)
-  // הפרמטרים: (שורת התחלה, עמודת התחלה, מספר שורות, מספר עמודות)
-  let sourceRange = sheet.getRangeByIndexes(1, 23, rowCount, 2);
-  let sourceValues = sourceRange.getValues();
-
-  // קריאת עמודות AS ו-AT (עמודות 44 ו-45 באינדקס 0)
-  let targetRange = sheet.getRangeByIndexes(1, 44, rowCount, 2);
-  let targetValues = targetRange.getValues();
-
-  // --- שלב 2: ביצוע הלוגיקה בזיכרון ---
-  
+  // לולאה מהירה על הזיכרון
   for (let i = 0; i < rowCount; i++) {
-    // שליפת הערכים הנוכחיים (עבור קריאות הקוד)
-    // עמודה 0 במערך המקומי = X או AS
-    // עמודה 1 במערך המקומי = Y או AT
-    
-    let valAS = String(targetValues[i][0]); // הערך ב-AS
-    let valAT = String(targetValues[i][1]); // הערך ב-AT
-    
-    // בדיקה עבור עמודה AS (החלפה בערך מ-X)
-    if (valAS.toLowerCase().indexOf("z") !== -1) {
-      targetValues[i][0] = sourceValues[i][0]; // העתקת הערך מ-X
+    // שליפת הערכים הנוכחיים ב-AS ו-AT
+    // אנו בודקים את הטייפ כדי למנוע קריסה בתאים ריקים או מספרים
+    let valAS = targetValues[i][0];
+    let valAT = targetValues[i][1];
+
+    // --- בדיקה עבור AS ---
+    // תנאי אופטימלי: בודק אם זה טקסט ורק אז מריץ את החיפוש
+    if (typeof valAS === 'string' && zPattern.test(valAS)) {
+      targetValues[i][0] = sourceValues[i][0]; // העתקה מ-X
+      hasChanges = true;
     }
 
-    // בדיקה עבור עמודה AT (החלפה בערך מ-Y)
-    if (valAT.toLowerCase().indexOf("z") !== -1) {
-      targetValues[i][1] = sourceValues[i][1]; // העתקת הערך מ-Y
+    // --- בדיקה עבור AT ---
+    if (typeof valAT === 'string' && zPattern.test(valAT)) {
+      targetValues[i][1] = sourceValues[i][1]; // העתקה מ-Y
+      hasChanges = true;
     }
   }
 
-  // --- שלב 3: כתיבת התוצאות חזרה לאקסל ---
-  // אנו כותבים חזרה רק את טווח המטרה (AS:AT) כי רק הוא השתנה
-  targetRange.setValues(targetValues);
+  // שמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
+  if (hasChanges) {
+    targetRange.setValues(targetValues);
+    console.log("הנתונים עודכנו בהצלחה.");
+  } else {
+    console.log("לא נמצאה האות z, לא בוצעו שינויים.");
+  }
 }
