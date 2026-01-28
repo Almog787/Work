@@ -1,56 +1,104 @@
 function main(workbook: ExcelScript.Workbook) {
+  // התחלת מדידת זמן
+  let startTime = new Date().getTime();
+  
+  console.log("מתחיל בתהליך הסריקה...");
+
   const sheet = workbook.getActiveWorksheet();
   const usedRange = sheet.getUsedRange();
 
-  if (!usedRange) return;
+  if (!usedRange) {
+    console.log("הגיליון ריק. מסיים ריצה.");
+    return;
+  }
 
   // חישוב גודל הטווח
   const lastRowIndex = usedRange.getLastRow().getRowIndex();
-  const rowCount = lastRowIndex; // מתחילים משורה 2 (מדלגים על כותרת)
+  // סך הכל שורות לעיבוד (מתחילים משורה 2, אז מחסרים 1 מהגובה הכולל אם התחלנו מ-0, אבל כאן הלוגיקה פשוטה יותר: שורת סיום פחות 1)
+  const rowCount = lastRowIndex; 
 
-  if (rowCount < 1) return;
+  if (rowCount < 1) {
+    console.log("אין מספיק נתונים לעיבוד (פחות מ-2 שורות).");
+    return;
+  }
 
-  // קריאת העמודות הרלוונטיות בלבד לזיכרון
+  console.log(`נמצאו ${rowCount} שורות לעיבוד. טוען נתונים לזיכרון...`);
+
+  // קריאת העמודות הרלוונטיות בלבד לזיכרון לשיפור ביצועים
   // X=23, Y=24 | AS=44, AT=45
-  const sourceRange = sheet.getRangeByIndexes(1, 23, rowCount, 2);
-  const targetRange = sheet.getRangeByIndexes(1, 44, rowCount, 2);
+  const sourceRange = sheet.getRangeByIndexes(1, 23, rowCount, 2); // עמודות מקור X, Y
+  const targetRange = sheet.getRangeByIndexes(1, 44, rowCount, 2); // עמודות יעד AS, AT
 
-  // טעינת הערכים (פעולת קריאה מהשרת)
+  // טעינת הערכים
   const sourceValues = sourceRange.getValues();
   const targetValues = targetRange.getValues();
 
-  // הגדרת ביטוי רגולרי לחיפוש האות z (הדגל 'i' אומר להתעלם מאותיות גדולות/קטנות)
-  const zPattern = /z/i;
-  
-  // משתנה עזר כדי לדעת אם בכלל צריך לשמור בסוף
+  // הגדרות לוגיקה
+  const zPattern = /z/i; // ביטוי רגולרי לחיפוש z (מתעלם מ-Case)
   let hasChanges = false;
+  
+  // מונים לסטטיסטיקה
+  let countChangedAS = 0;
+  let countChangedAT = 0;
+  
+  // --- הגדרה חדשה: דיווח כל 200 שורות ---
+  const logBatchSize = 200; 
 
-  // לולאה מהירה על הזיכרון
+  console.log("הנתונים נטענו בהצלחה, מתחיל בעיבוד השורות...");
+
+  // לולאה ראשית
   for (let i = 0; i < rowCount; i++) {
-    // שליפת הערכים הנוכחיים ב-AS ו-AT
-    // אנו בודקים את הטייפ כדי למנוע קריסה בתאים ריקים או מספרים
+    
+    // שליפת הערכים מהמערך בזיכרון
     let valAS = targetValues[i][0];
     let valAT = targetValues[i][1];
+    let rowChanged = false;
 
     // --- בדיקה עבור AS ---
-    // תנאי אופטימלי: בודק אם זה טקסט ורק אז מריץ את החיפוש
+    // מוודאים שזה סטרינג לפני הבדיקה כדי למנוע שגיאות
     if (typeof valAS === 'string' && zPattern.test(valAS)) {
       targetValues[i][0] = sourceValues[i][0]; // העתקה מ-X
-      hasChanges = true;
+      countChangedAS++;
+      rowChanged = true;
     }
 
     // --- בדיקה עבור AT ---
     if (typeof valAT === 'string' && zPattern.test(valAT)) {
       targetValues[i][1] = sourceValues[i][1]; // העתקה מ-Y
+      countChangedAT++;
+      rowChanged = true;
+    }
+
+    // סימון כללי שיש צורך בשמירה בסוף
+    if (rowChanged) {
       hasChanges = true;
+    }
+
+    // הדפסת התקדמות לקונסול כל 200 שורות
+    if ((i + 1) % logBatchSize === 0) {
+      console.log(`...מעבד... הושלמו ${i + 1} שורות מתוך ${rowCount}`);
     }
   }
 
-  // שמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
+  // שלב השמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
   if (hasChanges) {
+    console.log("סיימתי עיבוד. כותב את השינויים חזרה לאקסל...");
     targetRange.setValues(targetValues);
-    console.log("הנתונים עודכנו בהצלחה.");
   } else {
-    console.log("לא נמצאה האות z, לא בוצעו שינויים.");
+    console.log("לא נמצאה האות 'z' באף תא. לא בוצעה כתיבה.");
   }
+
+  // חישוב זמנים וסיכום
+  let endTime = new Date().getTime();
+  let duration = (endTime - startTime) / 1000; // המרה לשניות
+
+  console.log("-----------------------------------------");
+  console.log("             סיכום ביצוע                 ");
+  console.log("-----------------------------------------");
+  console.log(`סה"כ שורות שנבדקו: ${rowCount}`);
+  console.log(`החלפות שבוצעו בעמודה AS: ${countChangedAS}`);
+  console.log(`החלפות שבוצעו בעמודה AT: ${countChangedAT}`);
+  console.log(`סה"כ החלפות: ${countChangedAS + countChangedAT}`);
+  console.log(`זמן ריצה כולל: ${duration} שניות`);
+  console.log("-----------------------------------------");
 }
