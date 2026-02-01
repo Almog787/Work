@@ -1,93 +1,122 @@
+/**
+ * סקריפט לסידור עבודה: יצירת טבלת משמרות שבועית
+ */
 interface Controller {
   name: string;
-  jobType: string;
-  assignedShifts: string[]; // מערך של 7 ימים
-  assignedCount: number;
   maxShifts: number;
-  rowIndex: number; // השורה המקורית לבדיקת X
+  assignedCount: number;
+  schedule: string[]; // מערך של 7 תאים (ראשון-שבת)
+  originalRowIndex: number;
 }
 
 function main(workbook: ExcelScript.Workbook, sheetName: string = "01.02.2026-07.02.2026") {
   let sheet = workbook.getWorksheet(sheetName);
   if (!sheet) {
-    console.log("הגיליון לא נמצא.");
+    console.log("לא נמצא גיליון בשם: " + sheetName);
     return;
   }
 
-  // 1. קריאת הנתונים הקיימים
+  // 1. קריאת כל הנתונים מהטבלה הקיימת
   let usedRange = sheet.getUsedRange();
   let data = usedRange.getValues();
   let lastRow = usedRange.getRowCount();
 
-  const COL_NAME = 1;      // עמודה B
-  const COL_JOB_TYPE = 11; // עמודה L
-  const START_ROW = 2;     // שורת התחלה של השמות
-  const DAY_COLUMNS = [2, 3, 4, 5, 6, 7, 8]; // C עד I
+  // הגדרת עמודות לפי הצילום: B=שם(1), L=סוג משרה(11), C-I=ימים(2-8)
+  const COL_NAME = 1; 
+  const COL_JOB_TYPE = 11;
+  const DAY_COLS = [2, 3, 4, 5, 6, 7, 8]; // ראשון עד שבת
 
   let controllers: Controller[] = [];
 
-  // 2. איסוף בקרים
-  for (let i = START_ROW; i < data.length; i++) {
+  // 2. מיפוי הבקרים והאילוצים שלהם
+  for (let i = 2; i < data.length; i++) {
     let name = data[i][COL_NAME] as string;
+    let jobType = (data[i][COL_JOB_TYPE] as string) || "";
+    
     if (name && name.trim() !== "") {
       controllers.push({
         name: name,
-        jobType: data[i][COL_JOB_TYPE] as string || "",
-        assignedShifts: ["", "", "", "", "", "", ""],
+        maxShifts: jobType.includes("מלאה") ? 5 : 3, // משרה מלאה=5, אחר=3
         assignedCount: 0,
-        maxShifts: (data[i][COL_JOB_TYPE] as string || "").includes("מלאה") ? 5 : 3,
-        rowIndex: i
+        schedule: ["-", "-", "-", "-", "-", "-", "-"], // ברירת מחדל: לא עובד
+        originalRowIndex: i
       });
     }
   }
 
-  // 3. לוגיקת שיבוץ (ממלא את המערך assignedShifts)
-  DAY_COLUMNS.forEach((colIndex, dayIdx) => {
-    let assignedThisDay = 0;
+  // 3. לוגיקת שיבוץ משמרות
+  DAY_COLS.forEach((colIndex, dayIdx) => {
+    let morningShiftAssigned = false;
+
     for (let ctrl of controllers) {
-      let originalVal = data[ctrl.rowIndex][colIndex] as string;
-      
-      // בדיקת אילוץ (X) ומכסה
-      if (originalVal === "X" || originalVal === "x" || ctrl.assignedCount >= ctrl.maxShifts) {
+      // בדיקה: האם הבקר סימן X (לא יכול לעבוד)?
+      let constraint = data[ctrl.originalRowIndex][colIndex] as string;
+      if (constraint && (constraint.toUpperCase() === "X" || constraint.includes("לא"))) {
         continue;
       }
 
-      // קביעת זמן משמרת
-      let time = "";
-      if (dayIdx === 5) time = "06:00-14:30"; // שישי
-      else if (dayIdx === 6) time = "19:30-23:30"; // מוצ"ש
-      else time = (assignedThisDay % 2 === 0) ? "06:00-16:00" : "13:00-23:00"; // חול
+      // בדיקה: האם עבר את מכסת המשמרות השבועית?
+      if (ctrl.assignedCount >= ctrl.maxShifts) {
+        continue;
+      }
 
-      ctrl.assignedShifts[dayIdx] = time;
-      ctrl.assignedCount++;
-      assignedThisDay++;
+      // קביעת שעות המשמרת
+      let hours = "";
+      if (dayIdx === 5) { // יום שישי
+        hours = "06:00-14:30";
+      } else if (dayIdx === 6) { // מוצ"ש
+        hours = "19:30-23:30";
+      } else {
+        // ימי חול: חלוקה לבוקר וערב כדי שתהיה הגנה לאורך כל היום
+        if (!morningShiftAssigned) {
+          hours = "06:00-16:00";
+          morningShiftAssigned = true;
+        } else {
+          hours = "13:00-23:00";
+        }
+      }
+
+      // עדכון השיבוץ אם נמצאה משמרת פנויה ביום הזה
+      if (ctrl.schedule[dayIdx] === "-") {
+        ctrl.schedule[dayIdx] = hours;
+        ctrl.assignedCount++;
+        
+        // הגבלה: בקר אחד לבוקר ובקר אחד לערב ביום רגיל (אפשר להגדיל אם צריך יותר)
+        // אם כבר שיבצנו 2 בקרים ליום חול, נעבור ליום הבא
+        let assignedToday = controllers.filter(c => c.schedule[dayIdx] !== "-").length;
+        if (dayIdx < 5 && assignedToday >= 2) break; 
+      }
     }
   });
 
-  // 4. הכנת הטבלה החדשה להדפסה
-  let outputHeader = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
-  let outputRows = controllers.map(c => [c.name, ...c.assignedShifts]);
-
-  // מציאת מיקום להדפסה (3 שורות מתחת לטבלה הקיימת)
-  let startPrintRow = lastRow + 3;
+  // 4. בניית הטבלה החדשה מתחת לטבלה הקיימת
+  let startPrintRow = lastRow + 4; // רווח של 4 שורות
   
-  // כתיבת כותרת הטבלה החדשה
-  let headerRange = sheet.getRangeByIndexes(startPrintRow, 1, 1, 8);
-  headerRange.setValues(outputHeader);
-  headerRange.getFormat().getFill().setColor("#D3D3D3"); // צבע רקע אפור לכותרת
-  headerRange.getFormat().getFont().setBold(true);
+  // כותרות הטבלה
+  let headers = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
+  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).setValues(headers);
+  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).getFormat().getFont().setBold(true);
+  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).getFormat().getFill().setColor("#4472C4");
+  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).getFormat().getFont().setColor("white");
 
-  // כתיבת נתוני הבקרים
-  let dataRange = sheet.getRangeByIndexes(startPrintRow + 1, 1, outputRows.length, 8);
-  dataRange.setValues(outputRows);
+  // נתוני הבקרים
+  let tableData: string[][] = [];
+  controllers.forEach(ctrl => {
+    tableData.push([ctrl.name, ...ctrl.schedule]);
+  });
 
-  // הוספת גבולות (Borders) לטבלה החדשה
-  dataRange.getFormat().getRangeBorder("EdgeLeft").setStyle("Continuous");
-  dataRange.getFormat().getRangeBorder("EdgeRight").setStyle("Continuous");
-  dataRange.getFormat().getRangeBorder("EdgeTop").setStyle("Continuous");
-  dataRange.getFormat().getRangeBorder("EdgeBottom").setStyle("Continuous");
-  dataRange.getFormat().getRangeBorder("InsideHorizontal").setStyle("Continuous");
-  dataRange.getFormat().getRangeBorder("InsideVertical").setStyle("Continuous");
+  let dataRange = sheet.getRangeByIndexes(startPrintRow + 1, 1, tableData.length, 8);
+  dataRange.setValues(tableData);
 
-  console.log("טבלת השיבוץ נוצרה בהצלחה בשורה " + (startPrintRow + 1));
+  // עיצוב גבולות (Borders)
+  let wholeTable = sheet.getRangeByIndexes(startPrintRow, 1, tableData.length + 1, 8);
+  wholeTable.getFormat().getRangeBorder("EdgeLeft").setStyle("Continuous");
+  wholeTable.getFormat().getRangeBorder("EdgeRight").setStyle("Continuous");
+  wholeTable.getFormat().getRangeBorder("EdgeTop").setStyle("Continuous");
+  wholeTable.getFormat().getRangeBorder("EdgeBottom").setStyle("Continuous");
+  wholeTable.getFormat().getRangeBorder("InsideHorizontal").setStyle("Continuous");
+  wholeTable.getFormat().getRangeBorder("InsideVertical").setStyle("Continuous");
+  wholeTable.getFormat().getHorizontalAlignment() === "Center";
+
+  console.log("הסידור הושלם! הטבלה מופיעה בשורה " + (startPrintRow + 1));
 }
