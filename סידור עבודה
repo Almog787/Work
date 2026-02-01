@@ -1,0 +1,82 @@
+/**
+ * סקריפט לסידור עבודה אוטומטי
+ * @param sheetName שם הגיליון שבו נמצאים הנתונים והאילוצים
+ */
+function main(workbook: ExcelScript.Workbook, sheetName: string = "Sheet1") {
+  // 1. גישה לגיליון הנבחר
+  let sheet = workbook.getWorksheet(sheetName);
+  
+  if (!sheet) {
+    console.log(`הגיליון ${sheetName} לא נמצא. אנא ודא שהשם מדויק.`);
+    return;
+  }
+
+  // 2. קריאת הנתונים מהטבלה
+  let range = sheet.getUsedRange();
+  let data = range.getValues();
+
+  // הגדרות קבועות
+  const START_ROW = 2; // השורה שבה מתחילים הבקרים (אינדקס 0)
+  const COL_NAME = 1;  // עמודה B (שם הבקר)
+  const COL_JOB_TYPE = 11; // עמודה L (סוג משרה)
+  
+  // מיפוי עמודות הימים (לפי הצילום שלך)
+  // ראשון=C(2), שני=D(3), שלישי=E(4), רביעי=F(5), חמישי=G(6), שישי=H(7), מוצ"ש=I(8)
+  const DAY_COLUMNS = [2, 3, 4, 5, 6, 7, 8];
+
+  // 3. איסוף רשימת הבקרים והאילוצים שלהם
+  let controllers = [];
+  for (let i = START_ROW; i < data.length; i++) {
+    let name = data[i][COL_NAME] as string;
+    if (name && name.trim() !== "") {
+      controllers.push({
+        rowIndex: i,
+        name: name,
+        jobType: data[i][COL_JOB_TYPE] as string,
+        assignedCount: 0,
+        // קביעת מכסה לפי סוג משרה
+        maxShifts: (data[i][COL_JOB_TYPE] as string).includes("מלאה") ? 5 : 3
+      });
+    }
+  }
+
+  // 4. לוגיקת שיבוץ
+  DAY_COLUMNS.forEach((colIndex, dayIdx) => {
+    let shiftsInDay = 0;
+
+    for (let controller of controllers) {
+      // בדיקה אם התא כבר מלא (למשל ב-X או בבקשה מיוחדת)
+      let currentCellValue = data[controller.rowIndex][colIndex] as string;
+      
+      // אם התא מכיל "X" או טקסט שמעיד על חוסר זמינות - נדלג
+      if (currentCellValue && (currentCellValue.toLowerCase() === "x" || currentCellValue.includes("לא"))) {
+        continue; 
+      }
+
+      // אם הבקר כבר הגיע למכסה השבועית שלו
+      if (controller.assignedCount >= controller.maxShifts) {
+        continue;
+      }
+
+      // קביעת שעות המשמרת לפי היום
+      let shiftTime = "";
+      if (dayIdx === 5) { // יום שישי
+        shiftTime = "06:00-14:30";
+      } else if (dayIdx === 6) { // מוצ"ש
+        shiftTime = "19:30-23:30";
+      } else { // ימי חול
+        // חלוקה פשוטה לבוקר וערב לסירוגין
+        shiftTime = shiftsInDay % 2 === 0 ? "06:00-16:00" : "13:00-23:00";
+      }
+
+      // שיבוץ בגיליון
+      sheet.getCell(controller.rowIndex, colIndex).setValue(shiftTime);
+      
+      // עדכון מונים
+      controller.assignedCount++;
+      shiftsInDay++;
+    }
+  });
+
+  console.log("הסידור הושלם עבור גיליון: " + sheetName);
+}
