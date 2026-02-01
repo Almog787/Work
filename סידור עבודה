@@ -1,82 +1,82 @@
-/**
- * סקריפט לסידור עבודה אוטומטי
- * @param sheetName שם הגיליון שבו נמצאים הנתונים והאילוצים
- */
-function main(workbook: ExcelScript.Workbook, sheetName: string = "Sheet1") {
-  // 1. גישה לגיליון הנבחר
+// הגדרת מבנה הנתונים של בקר כדי למנוע שגיאות קומפילציה
+interface Controller {
+  rowIndex: number;
+  name: string;
+  jobType: string;
+  assignedCount: number;
+  maxShifts: number;
+}
+
+function main(workbook: ExcelScript.Workbook, sheetName: string = "01.02.2026-07.02.2026") {
+  // 1. גישה לגיליון
   let sheet = workbook.getWorksheet(sheetName);
   
   if (!sheet) {
-    console.log(`הגיליון ${sheetName} לא נמצא. אנא ודא שהשם מדויק.`);
+    console.log(`שגיאה: הגיליון בשם "${sheetName}" לא נמצא.`);
     return;
   }
 
-  // 2. קריאת הנתונים מהטבלה
+  // 2. קריאת הנתונים
   let range = sheet.getUsedRange();
   let data = range.getValues();
 
-  // הגדרות קבועות
-  const START_ROW = 2; // השורה שבה מתחילים הבקרים (אינדקס 0)
-  const COL_NAME = 1;  // עמודה B (שם הבקר)
-  const COL_JOB_TYPE = 11; // עמודה L (סוג משרה)
-  
-  // מיפוי עמודות הימים (לפי הצילום שלך)
-  // ראשון=C(2), שני=D(3), שלישי=E(4), רביעי=F(5), חמישי=G(6), שישי=H(7), מוצ"ש=I(8)
+  // מיפוי עמודות לפי הצילום (A=0, B=1, C=2...)
+  const COL_NAME = 1;      // עמודה B: שם הבקר
+  const COL_JOB_TYPE = 11; // עמודה L: סוג משרה (משרה מלאה/חלקית)
+  const START_ROW = 2;     // שורה שבה מתחילים השמות (אחרי הכותרות)
+
+  // עמודות הימים: ראשון (C=2) עד מוצ"ש (I=8)
   const DAY_COLUMNS = [2, 3, 4, 5, 6, 7, 8];
 
-  // 3. איסוף רשימת הבקרים והאילוצים שלהם
-  let controllers = [];
+  // 3. יצירת רשימת הבקרים עם הגדרת סוג מפורשת (פותר את השגיאה שציינת)
+  let controllers: Controller[] = [];
+
   for (let i = START_ROW; i < data.length; i++) {
     let name = data[i][COL_NAME] as string;
+    let jobTypeStr = data[i][COL_JOB_TYPE] as string || "";
+
     if (name && name.trim() !== "") {
       controllers.push({
         rowIndex: i,
         name: name,
-        jobType: data[i][COL_JOB_TYPE] as string,
+        jobType: jobTypeStr,
         assignedCount: 0,
-        // קביעת מכסה לפי סוג משרה
-        maxShifts: (data[i][COL_JOB_TYPE] as string).includes("מלאה") ? 5 : 3
+        // קביעת מכסה: משרה מלאה = 5 משמרות, אחרת 3 (ניתן לשינוי)
+        maxShifts: jobTypeStr.includes("מלאה") ? 5 : 3
       });
     }
   }
 
-  // 4. לוגיקת שיבוץ
+  // 4. לוגיקת שיבוץ בסיסית
   DAY_COLUMNS.forEach((colIndex, dayIdx) => {
-    let shiftsInDay = 0;
+    let assignedThisDay = 0;
 
     for (let controller of controllers) {
-      // בדיקה אם התא כבר מלא (למשל ב-X או בבקשה מיוחדת)
-      let currentCellValue = data[controller.rowIndex][colIndex] as string;
+      // בדיקת אילוצים:
+      let currentVal = data[controller.rowIndex][colIndex] as string;
       
-      // אם התא מכיל "X" או טקסט שמעיד על חוסר זמינות - נדלג
-      if (currentCellValue && (currentCellValue.toLowerCase() === "x" || currentCellValue.includes("לא"))) {
-        continue; 
-      }
-
-      // אם הבקר כבר הגיע למכסה השבועית שלו
-      if (controller.assignedCount >= controller.maxShifts) {
+      // אם התא כבר מכיל X או שהבקר הגיע למכסה - דלג
+      if (currentVal === "X" || currentVal === "x" || controller.assignedCount >= controller.maxShifts) {
         continue;
       }
 
-      // קביעת שעות המשמרת לפי היום
+      // הגדרת שעת משמרת (דוגמה)
       let shiftTime = "";
-      if (dayIdx === 5) { // יום שישי
+      if (dayIdx === 5) { // שישי
         shiftTime = "06:00-14:30";
       } else if (dayIdx === 6) { // מוצ"ש
         shiftTime = "19:30-23:30";
-      } else { // ימי חול
-        // חלוקה פשוטה לבוקר וערב לסירוגין
-        shiftTime = shiftsInDay % 2 === 0 ? "06:00-16:00" : "13:00-23:00";
+      } else { // ימי חול - חלוקה לבוקר/ערב
+        shiftTime = (assignedThisDay % 2 === 0) ? "06:00-16:00" : "13:00-23:00";
       }
 
-      // שיבוץ בגיליון
+      // כתיבה לתא
       sheet.getCell(controller.rowIndex, colIndex).setValue(shiftTime);
       
-      // עדכון מונים
       controller.assignedCount++;
-      shiftsInDay++;
+      assignedThisDay++;
     }
   });
 
-  console.log("הסידור הושלם עבור גיליון: " + sheetName);
+  console.log("השיבוץ הסתיים בהצלחה.");
 }
