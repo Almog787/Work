@@ -1,82 +1,93 @@
-// הגדרת מבנה הנתונים של בקר כדי למנוע שגיאות קומפילציה
 interface Controller {
-  rowIndex: number;
   name: string;
   jobType: string;
+  assignedShifts: string[]; // מערך של 7 ימים
   assignedCount: number;
   maxShifts: number;
+  rowIndex: number; // השורה המקורית לבדיקת X
 }
 
 function main(workbook: ExcelScript.Workbook, sheetName: string = "01.02.2026-07.02.2026") {
-  // 1. גישה לגיליון
   let sheet = workbook.getWorksheet(sheetName);
-  
   if (!sheet) {
-    console.log(`שגיאה: הגיליון בשם "${sheetName}" לא נמצא.`);
+    console.log("הגיליון לא נמצא.");
     return;
   }
 
-  // 2. קריאת הנתונים
-  let range = sheet.getUsedRange();
-  let data = range.getValues();
+  // 1. קריאת הנתונים הקיימים
+  let usedRange = sheet.getUsedRange();
+  let data = usedRange.getValues();
+  let lastRow = usedRange.getRowCount();
 
-  // מיפוי עמודות לפי הצילום (A=0, B=1, C=2...)
-  const COL_NAME = 1;      // עמודה B: שם הבקר
-  const COL_JOB_TYPE = 11; // עמודה L: סוג משרה (משרה מלאה/חלקית)
-  const START_ROW = 2;     // שורה שבה מתחילים השמות (אחרי הכותרות)
+  const COL_NAME = 1;      // עמודה B
+  const COL_JOB_TYPE = 11; // עמודה L
+  const START_ROW = 2;     // שורת התחלה של השמות
+  const DAY_COLUMNS = [2, 3, 4, 5, 6, 7, 8]; // C עד I
 
-  // עמודות הימים: ראשון (C=2) עד מוצ"ש (I=8)
-  const DAY_COLUMNS = [2, 3, 4, 5, 6, 7, 8];
-
-  // 3. יצירת רשימת הבקרים עם הגדרת סוג מפורשת (פותר את השגיאה שציינת)
   let controllers: Controller[] = [];
 
+  // 2. איסוף בקרים
   for (let i = START_ROW; i < data.length; i++) {
     let name = data[i][COL_NAME] as string;
-    let jobTypeStr = data[i][COL_JOB_TYPE] as string || "";
-
     if (name && name.trim() !== "") {
       controllers.push({
-        rowIndex: i,
         name: name,
-        jobType: jobTypeStr,
+        jobType: data[i][COL_JOB_TYPE] as string || "",
+        assignedShifts: ["", "", "", "", "", "", ""],
         assignedCount: 0,
-        // קביעת מכסה: משרה מלאה = 5 משמרות, אחרת 3 (ניתן לשינוי)
-        maxShifts: jobTypeStr.includes("מלאה") ? 5 : 3
+        maxShifts: (data[i][COL_JOB_TYPE] as string || "").includes("מלאה") ? 5 : 3,
+        rowIndex: i
       });
     }
   }
 
-  // 4. לוגיקת שיבוץ בסיסית
+  // 3. לוגיקת שיבוץ (ממלא את המערך assignedShifts)
   DAY_COLUMNS.forEach((colIndex, dayIdx) => {
     let assignedThisDay = 0;
-
-    for (let controller of controllers) {
-      // בדיקת אילוצים:
-      let currentVal = data[controller.rowIndex][colIndex] as string;
+    for (let ctrl of controllers) {
+      let originalVal = data[ctrl.rowIndex][colIndex] as string;
       
-      // אם התא כבר מכיל X או שהבקר הגיע למכסה - דלג
-      if (currentVal === "X" || currentVal === "x" || controller.assignedCount >= controller.maxShifts) {
+      // בדיקת אילוץ (X) ומכסה
+      if (originalVal === "X" || originalVal === "x" || ctrl.assignedCount >= ctrl.maxShifts) {
         continue;
       }
 
-      // הגדרת שעת משמרת (דוגמה)
-      let shiftTime = "";
-      if (dayIdx === 5) { // שישי
-        shiftTime = "06:00-14:30";
-      } else if (dayIdx === 6) { // מוצ"ש
-        shiftTime = "19:30-23:30";
-      } else { // ימי חול - חלוקה לבוקר/ערב
-        shiftTime = (assignedThisDay % 2 === 0) ? "06:00-16:00" : "13:00-23:00";
-      }
+      // קביעת זמן משמרת
+      let time = "";
+      if (dayIdx === 5) time = "06:00-14:30"; // שישי
+      else if (dayIdx === 6) time = "19:30-23:30"; // מוצ"ש
+      else time = (assignedThisDay % 2 === 0) ? "06:00-16:00" : "13:00-23:00"; // חול
 
-      // כתיבה לתא
-      sheet.getCell(controller.rowIndex, colIndex).setValue(shiftTime);
-      
-      controller.assignedCount++;
+      ctrl.assignedShifts[dayIdx] = time;
+      ctrl.assignedCount++;
       assignedThisDay++;
     }
   });
 
-  console.log("השיבוץ הסתיים בהצלחה.");
+  // 4. הכנת הטבלה החדשה להדפסה
+  let outputHeader = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
+  let outputRows = controllers.map(c => [c.name, ...c.assignedShifts]);
+
+  // מציאת מיקום להדפסה (3 שורות מתחת לטבלה הקיימת)
+  let startPrintRow = lastRow + 3;
+  
+  // כתיבת כותרת הטבלה החדשה
+  let headerRange = sheet.getRangeByIndexes(startPrintRow, 1, 1, 8);
+  headerRange.setValues(outputHeader);
+  headerRange.getFormat().getFill().setColor("#D3D3D3"); // צבע רקע אפור לכותרת
+  headerRange.getFormat().getFont().setBold(true);
+
+  // כתיבת נתוני הבקרים
+  let dataRange = sheet.getRangeByIndexes(startPrintRow + 1, 1, outputRows.length, 8);
+  dataRange.setValues(outputRows);
+
+  // הוספת גבולות (Borders) לטבלה החדשה
+  dataRange.getFormat().getRangeBorder("EdgeLeft").setStyle("Continuous");
+  dataRange.getFormat().getRangeBorder("EdgeRight").setStyle("Continuous");
+  dataRange.getFormat().getRangeBorder("EdgeTop").setStyle("Continuous");
+  dataRange.getFormat().getRangeBorder("EdgeBottom").setStyle("Continuous");
+  dataRange.getFormat().getRangeBorder("InsideHorizontal").setStyle("Continuous");
+  dataRange.getFormat().getRangeBorder("InsideVertical").setStyle("Continuous");
+
+  console.log("טבלת השיבוץ נוצרה בהצלחה בשורה " + (startPrintRow + 1));
 }
