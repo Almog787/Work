@@ -10,54 +10,61 @@ function main(workbook: ExcelScript.Workbook) {
   const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"];
 
   // --- 2. הקמת תשתית (יוצר רק אם חסר) ---
-  setupSheetAndTable(workbook, "בקרים", "ControllersTable", ["שם הבקר", "סוג משרה", "מכסה חודשית", "בוצע", "יתרה"], controllerNames.map(n => [n, "משרה מלאה", 160, 0, 160]));
+  
+  // הגדרת סוג הנתונים במקום any
+  type ExcelValue = string | number | boolean;
+
+  // הכנת נתוני בקרים
+  let initialControllers: ExcelValue[][] = controllerNames.map(n => [n, "משרה מלאה", 160, 0, 160]);
+  setupSheetAndTable(workbook, "בקרים", "ControllersTable", ["שם הבקר", "סוג משרה", "מכסה חודשית", "בוצע", "יתרה"], initialControllers);
   
   // יצירת 34 תחנות X 4 משימות בסימולציה
-  let initialTasks: any[][] = [];
+  let initialTasks: ExcelValue[][] = [];
   for (let i = 1; i <= 34; i++) {
     taskTypes.forEach(t => initialTasks.push([`תחנה ${i}`, t, 10, 0, "רגילה"]));
   }
   setupSheetAndTable(workbook, "מכסות_משימות", "TasksTable", ["תחנה", "סוג משימה", "יעד חודשי", "בוצע", "עדיפות"], initialTasks);
 
-  // יצירת אילוצים (עם X אקראי רק אם הטבלה חדשה)
-  let initialConstraints = controllerNames.map(n => [n, "", "", "", "", "", "", ""]);
+  // יצירת אילוצים
+  let initialConstraints: ExcelValue[][] = controllerNames.map(n => [n, "", "", "", "", "", "", ""]);
   setupSheetAndTable(workbook, "אילוצים_שבועיים", "ConstraintsTable", ["שם הבקר", ...days], initialConstraints);
 
-  // הכנת גיליון פלט (תמיד מתנקה בהרצה)
+  // הכנת גיליון פלט
   let finalSheet = workbook.getWorksheet("לוח_שיבוץ_סופי") || workbook.addWorksheet("לוח_שיבוץ_סופי");
   finalSheet.getUsedRange()?.clear();
   finalSheet.getRange("A1:F1").setValues([["יום", "שם הבקר", "משעה", "עד שעה", "משימה", "הערות"]]);
 
-  // --- 3. מנוע השיבוץ (The Engine) ---
+  // --- 3. מנוע השיבוץ ---
   
-  // קריאת נתונים מהטבלאות
-  let constraintsData = workbook.getTable("ConstraintsTable").getRange().getValues();
+  let constraintsTable = workbook.getTable("ConstraintsTable");
+  let constraintsData = constraintsTable.getRange().getValues();
+  
   let tasksTable = workbook.getTable("TasksTable");
   let tasksData = tasksTable.getRange().getValues();
 
-  // מיון משימות לפי אלו שבוצעו הכי פחות (העלאת עדיפות)
-  let taskList = tasksData.slice(1).map((row, index) => ({
-    station: row[0], task: row[1], done: Number(row[3]), originalIndex: index + 2
-  })).sort((a, b) => a.done - b.done);
+  // יצירת רשימת משימות ממוינת (ללא any)
+  let taskList = tasksData.slice(1).map((row) => {
+    return {
+      station: row[0] as string,
+      task: row[1] as string,
+      done: Number(row[3])
+    };
+  }).sort((a, b) => a.done - b.done);
 
-  let scheduleRows: any[] = [];
+  let scheduleRows: ExcelValue[][] = [];
   let taskPtr = 0;
 
-  // לולאה על ימי השבוע
   days.forEach((dayName, dIdx) => {
     let dailyAssignedCount = 0;
 
-    // הגדרת שעות לפי היום (חוקי העבודה שביקשת)
     let startTime = "06:00:00", endTime = "16:00:00", isLongShift = true;
-    if (dIdx === 5) { startTime = "06:00:00"; endTime = "14:30:00"; isLongShift = false; } // שישי
-    if (dIdx === 6) { startTime = "19:30:00"; endTime = "00:30:00"; isLongShift = false; } // מוצ"ש
+    if (dIdx === 5) { startTime = "06:00:00"; endTime = "14:30:00"; isLongShift = false; }
+    if (dIdx === 6) { startTime = "19:30:00"; endTime = "00:30:00"; isLongShift = false; }
 
-    // מעבר על רשימת הבקרים ביום הספציפי
     for (let i = 1; i < constraintsData.length; i++) {
       let bokerName = constraintsData[i][0] as string;
       let availability = constraintsData[i][dIdx + 1] as string;
 
-      // אם התא לא מכיל X והבקר עוד לא עבר את המכסה היומית (נניח 6 בקרים בו זמנית בקו)
       if (availability.toUpperCase() !== "X" && dailyAssignedCount < 6) {
         let currentTask = taskList[taskPtr % taskList.length];
         
@@ -76,26 +83,33 @@ function main(workbook: ExcelScript.Workbook) {
     }
   });
 
-  // --- 4. כתיבת התוצאות ועיצוב ---
+  // --- 4. כתיבת התוצאות ---
   if (scheduleRows.length > 0) {
     finalSheet.getRangeByIndexes(1, 0, scheduleRows.length, 6).setValues(scheduleRows);
     
-    // עיצוב טבלת הפלט
+    // עיצוב וטבלה
     let tableRange = finalSheet.getRangeByIndexes(0, 0, scheduleRows.length + 1, 6);
-    let outputTable = workbook.getTable("FinalScheduleTable") || workbook.addTable(tableRange, true);
-    outputTable.setName("FinalScheduleTable");
+    if (!workbook.getTable("FinalScheduleTable")) {
+        workbook.addTable(tableRange, true).setName("FinalScheduleTable");
+    }
   }
 
   finalSheet.getUsedRange().getFormat().autofitColumns();
   finalSheet.activate();
   
-  console.log("מערכת השיבוץ רצה בהצלחה. הסידור מוכן בגיליון 'לוח_שיבוץ_סופי'.");
+  console.log("הסידור הושלם בהצלחה.");
 }
 
 /**
- * פונקציית עזר להקמת גיליונות וטבלאות בצורה בטוחה (ללא דריסה)
+ * פונקציית עזר להקמת גיליונות וטבלאות ללא שימוש ב-any
  */
-function setupSheetAndTable(workbook: ExcelScript.Workbook, sheetName: string, tableName: string, headers: string[], defaultData: any[][]) {
+function setupSheetAndTable(
+    workbook: ExcelScript.Workbook, 
+    sheetName: string, 
+    tableName: string, 
+    headers: string[], 
+    defaultData: (string | number | boolean)[][]
+) {
   let sheet = workbook.getWorksheet(sheetName);
   
   if (!sheet) {
@@ -103,7 +117,6 @@ function setupSheetAndTable(workbook: ExcelScript.Workbook, sheetName: string, t
     let headerRange = sheet.getRangeByIndexes(0, 0, 1, headers.length);
     headerRange.setValues([headers]);
     
-    // הוספת נתוני ברירת מחדל (סימולציה) רק אם הגיליון חדש
     sheet.getRangeByIndexes(1, 0, defaultData.length, headers.length).setValues(defaultData);
     
     let tableRange = sheet.getRangeByIndexes(0, 0, defaultData.length + 1, headers.length);
@@ -113,7 +126,5 @@ function setupSheetAndTable(workbook: ExcelScript.Workbook, sheetName: string, t
     headerRange.getFormat().getFill().setColor("#4472C4");
     headerRange.getFormat().getFont().setColor("white");
     sheet.getUsedRange().getFormat().autofitColumns();
-  } else {
-    console.log(`גיליון ${sheetName} כבר קיים. משתמש בנתונים הקיימים.`);
   }
 }
