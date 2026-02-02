@@ -1,56 +1,119 @@
 function main(workbook: ExcelScript.Workbook) {
-  let sheetConstraints = workbook.getTable("ConstraintsTable").getRange().getValues();
-  let sheetTasks = workbook.getTable("TasksTable").getRange().getValues();
-  let outputSheet = workbook.getWorksheet("לוח_שיבוץ_סופי");
-  outputSheet.getUsedRange()?.clear(); // ניקוי סידור קודם
-  outputSheet.getRange("A1:F1").setValues([["יום", "שם הבקר", "משעה", "עד שעה", "משימה", "הערות"]]);
-
-  let scheduleRows: any[] = [];
+  // --- 1. הגדרות בסיס ---
+  const controllerNames = [
+    "אורי מייזלר", "אינה טימופייב", "אלתי קראו", "בוריס דולציגר", 
+    "בוריס ינקין", "בתיה אביה", "גדי בן אור", "דוד סייג", 
+    "הרצל שגב", "יוני יוסף", "משה אליהו", "ערן ניצן", 
+    "רון טוב", "אברהם גברילביץ'", "יוני ניסן"
+  ];
+  const taskTypes = ["בקרת בטיחות", "בקרת כרטוס", "בקרת תפעול", "בקרת תחזוקה"];
   const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"];
 
-  // מיון משימות לפי אלו שבוצעו הכי פחות (עדיפות גבוהה)
-  let tasks = sheetTasks.slice(1).map(row => ({
-    station: row[0], task: row[1], target: row[2], done: row[3]
-  })).sort((a, b) => (Number(a.done) - Number(b.done)));
+  // --- 2. הקמת תשתית (יוצר רק אם חסר) ---
+  setupSheetAndTable(workbook, "בקרים", "ControllersTable", ["שם הבקר", "סוג משרה", "מכסה חודשית", "בוצע", "יתרה"], controllerNames.map(n => [n, "משרה מלאה", 160, 0, 160]));
+  
+  // יצירת 34 תחנות X 4 משימות בסימולציה
+  let initialTasks: any[][] = [];
+  for (let i = 1; i <= 34; i++) {
+    taskTypes.forEach(t => initialTasks.push([`תחנה ${i}`, t, 10, 0, "רגילה"]));
+  }
+  setupSheetAndTable(workbook, "מכסות_משימות", "TasksTable", ["תחנה", "סוג משימה", "יעד חודשי", "בוצע", "עדיפות"], initialTasks);
 
-  let taskPointer = 0;
+  // יצירת אילוצים (עם X אקראי רק אם הטבלה חדשה)
+  let initialConstraints = controllerNames.map(n => [n, "", "", "", "", "", "", ""]);
+  setupSheetAndTable(workbook, "אילוצים_שבועיים", "ConstraintsTable", ["שם הבקר", ...days], initialConstraints);
 
-  days.forEach((day, dayIdx) => {
-    let assignedToday: string[] = [];
-    
-    // לוגיקת שעות לפי היום
-    let start = "06:00:00", end = "16:00:00", duration = 10;
-    if (dayIdx === 5) { start = "06:00:00"; end = "14:30:00"; duration = 8.5; }
-    if (dayIdx === 6) { start = "19:00:00"; end = "01:00:00"; duration = 6; }
+  // הכנת גיליון פלט (תמיד מתנקה בהרצה)
+  let finalSheet = workbook.getWorksheet("לוח_שיבוץ_סופי") || workbook.addWorksheet("לוח_שיבוץ_סופי");
+  finalSheet.getUsedRange()?.clear();
+  finalSheet.getRange("A1:F1").setValues([["יום", "שם הבקר", "משעה", "עד שעה", "משימה", "הערות"]]);
 
-    // שיבוץ בקרים ליום הנוכחי (משמרת בוקר לדוגמה)
-    for (let i = 1; i < sheetConstraints.length; i++) {
-      let controllerName = sheetConstraints[i][0] as string;
-      let isUnavailable = sheetConstraints[i][dayIdx + 1] === "X";
+  // --- 3. מנוע השיבוץ (The Engine) ---
+  
+  // קריאת נתונים מהטבלאות
+  let constraintsData = workbook.getTable("ConstraintsTable").getRange().getValues();
+  let tasksTable = workbook.getTable("TasksTable");
+  let tasksData = tasksTable.getRange().getValues();
 
-      if (!isUnavailable && assignedToday.length < 8) { // נשבץ עד 8 בקרים ביום בסימולציה
-        let currentTask = tasks[taskPointer % tasks.length];
+  // מיון משימות לפי אלו שבוצעו הכי פחות (העלאת עדיפות)
+  let taskList = tasksData.slice(1).map((row, index) => ({
+    station: row[0], task: row[1], done: Number(row[3]), originalIndex: index + 2
+  })).sort((a, b) => a.done - b.done);
+
+  let scheduleRows: any[] = [];
+  let taskPtr = 0;
+
+  // לולאה על ימי השבוע
+  days.forEach((dayName, dIdx) => {
+    let dailyAssignedCount = 0;
+
+    // הגדרת שעות לפי היום (חוקי העבודה שביקשת)
+    let startTime = "06:00:00", endTime = "16:00:00", isLongShift = true;
+    if (dIdx === 5) { startTime = "06:00:00"; endTime = "14:30:00"; isLongShift = false; } // שישי
+    if (dIdx === 6) { startTime = "19:30:00"; endTime = "00:30:00"; isLongShift = false; } // מוצ"ש
+
+    // מעבר על רשימת הבקרים ביום הספציפי
+    for (let i = 1; i < constraintsData.length; i++) {
+      let bokerName = constraintsData[i][0] as string;
+      let availability = constraintsData[i][dIdx + 1] as string;
+
+      // אם התא לא מכיל X והבקר עוד לא עבר את המכסה היומית (נניח 6 בקרים בו זמנית בקו)
+      if (availability.toUpperCase() !== "X" && dailyAssignedCount < 6) {
+        let currentTask = taskList[taskPtr % taskList.length];
         
         scheduleRows.push([
-          day,
-          controllerName,
-          start,
-          end,
-          `${currentTask.station} - ${currentTask.task}`,
-          duration > 9 ? "חריגה מעל 9 שעות" : ""
+          dayName,
+          bokerName,
+          startTime,
+          endTime,
+          `${currentTask.station} (${currentTask.task})`,
+          isLongShift ? "חריגה מעל 9 שעות" : ""
         ]);
-        
-        assignedToday.push(controllerName);
-        taskPointer++;
+
+        dailyAssignedCount++;
+        taskPtr++;
       }
     }
   });
 
-  // כתיבה לגיליון
+  // --- 4. כתיבת התוצאות ועיצוב ---
   if (scheduleRows.length > 0) {
-    outputSheet.getRangeByIndexes(1, 0, scheduleRows.length, 6).setValues(scheduleRows);
+    finalSheet.getRangeByIndexes(1, 0, scheduleRows.length, 6).setValues(scheduleRows);
+    
+    // עיצוב טבלת הפלט
+    let tableRange = finalSheet.getRangeByIndexes(0, 0, scheduleRows.length + 1, 6);
+    let outputTable = workbook.getTable("FinalScheduleTable") || workbook.addTable(tableRange, true);
+    outputTable.setName("FinalScheduleTable");
   }
+
+  finalSheet.getUsedRange().getFormat().autofitColumns();
+  finalSheet.activate();
   
-  outputSheet.getUsedRange().getFormat().autofitColumns();
-  console.log("הסידור השבועי הסתיים בהצלחה!");
+  console.log("מערכת השיבוץ רצה בהצלחה. הסידור מוכן בגיליון 'לוח_שיבוץ_סופי'.");
+}
+
+/**
+ * פונקציית עזר להקמת גיליונות וטבלאות בצורה בטוחה (ללא דריסה)
+ */
+function setupSheetAndTable(workbook: ExcelScript.Workbook, sheetName: string, tableName: string, headers: string[], defaultData: any[][]) {
+  let sheet = workbook.getWorksheet(sheetName);
+  
+  if (!sheet) {
+    sheet = workbook.addWorksheet(sheetName);
+    let headerRange = sheet.getRangeByIndexes(0, 0, 1, headers.length);
+    headerRange.setValues([headers]);
+    
+    // הוספת נתוני ברירת מחדל (סימולציה) רק אם הגיליון חדש
+    sheet.getRangeByIndexes(1, 0, defaultData.length, headers.length).setValues(defaultData);
+    
+    let tableRange = sheet.getRangeByIndexes(0, 0, defaultData.length + 1, headers.length);
+    let table = workbook.addTable(tableRange, true);
+    table.setName(tableName);
+    
+    headerRange.getFormat().getFill().setColor("#4472C4");
+    headerRange.getFormat().getFont().setColor("white");
+    sheet.getUsedRange().getFormat().autofitColumns();
+  } else {
+    console.log(`גיליון ${sheetName} כבר קיים. משתמש בנתונים הקיימים.`);
+  }
 }
