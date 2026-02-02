@@ -1,122 +1,48 @@
-/**
- * סקריפט לסידור עבודה: יצירת טבלת משמרות שבועית
- */
-interface Controller {
-  name: string;
-  maxShifts: number;
-  assignedCount: number;
-  schedule: string[]; // מערך של 7 תאים (ראשון-שבת)
-  originalRowIndex: number;
-}
+function main(workbook: ExcelScript.Workbook) {
+  // 1. הגדרת רשימת הגיליונות והטבלאות הנדרשות
+  const sheets = [
+    { name: "בקרים", table: "ControllersTable", headers: [["שם הבקר", "סוג משרה", "מכסת שעות חודשית", "שעות שבוצעו", "יתרה לביצוע"]] },
+    { name: "מכסות_משימות", table: "TasksTable", headers: [["שם התחנה", "יעד בקרות חודשי", "בוצע בפועל", "עדיפות"]] },
+    { name: "אילוצים_שבועיים", table: "ConstraintsTable", headers: [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]] },
+    { name: "לוח_שיבוץ_סופי", table: "FinalSchedule", headers: [["תאריך", "שם הבקר", "שעות משמרת", "תחנה/גזרה", "הערות חריגה"]] }
+  ];
 
-function main(workbook: ExcelScript.Workbook, sheetName: string = "01.02.2026-07.02.2026") {
-  let sheet = workbook.getWorksheet(sheetName);
-  if (!sheet) {
-    console.log("לא נמצא גיליון בשם: " + sheetName);
-    return;
-  }
-
-  // 1. קריאת כל הנתונים מהטבלה הקיימת
-  let usedRange = sheet.getUsedRange();
-  let data = usedRange.getValues();
-  let lastRow = usedRange.getRowCount();
-
-  // הגדרת עמודות לפי הצילום: B=שם(1), L=סוג משרה(11), C-I=ימים(2-8)
-  const COL_NAME = 1; 
-  const COL_JOB_TYPE = 11;
-  const DAY_COLS = [2, 3, 4, 5, 6, 7, 8]; // ראשון עד שבת
-
-  let controllers: Controller[] = [];
-
-  // 2. מיפוי הבקרים והאילוצים שלהם
-  for (let i = 2; i < data.length; i++) {
-    let name = data[i][COL_NAME] as string;
-    let jobType = (data[i][COL_JOB_TYPE] as string) || "";
+  sheets.forEach(s => {
+    // מחיקת גיליון קיים אם יש כזה (כדי להתחיל מחדש) - זהירות: מוחק נתונים!
+    let currentSheet = workbook.getWorksheet(s.name);
+    if (currentSheet) {
+      currentSheet.delete();
+    }
     
-    if (name && name.trim() !== "") {
-      controllers.push({
-        name: name,
-        maxShifts: jobType.includes("מלאה") ? 5 : 3, // משרה מלאה=5, אחר=3
-        assignedCount: 0,
-        schedule: ["-", "-", "-", "-", "-", "-", "-"], // ברירת מחדל: לא עובד
-        originalRowIndex: i
-      });
+    // יצירת גיליון חדש
+    let newSheet = workbook.addWorksheet(s.name);
+    
+    // הוספת כותרות
+    let headerRange = newSheet.getRangeByIndexes(0, 0, 1, s.headers[0].length);
+    headerRange.setValues(s.headers);
+    
+    // הפיכה לטבלה (Excel Table)
+    let table = workbook.addTable(headerRange, true);
+    table.setName(s.table);
+    
+    // עיצוב בסיסי
+    headerRange.getFormat().getFont().setBold(true);
+    headerRange.getFormat().getFill().setColor("#4472C4");
+    headerRange.getFormat().getFont().setColor("white");
+
+    // הוספת שורות דוגמה בסיסיות
+    if (s.name === "בקרים") {
+      newSheet.getRange("A2:E2").setValues([["ישראל ישראלי", "משרה מלאה", 160, 0, 160]]);
+    } else if (s.name === "מכסות_משימות") {
+      newSheet.getRange("A2:D2").setValues([["אלנבי", 40, 0, "גבוהה"]]);
     }
-  }
 
-  // 3. לוגיקת שיבוץ משמרות
-  DAY_COLS.forEach((colIndex, dayIdx) => {
-    let morningShiftAssigned = false;
-
-    for (let ctrl of controllers) {
-      // בדיקה: האם הבקר סימן X (לא יכול לעבוד)?
-      let constraint = data[ctrl.originalRowIndex][colIndex] as string;
-      if (constraint && (constraint.toUpperCase() === "X" || constraint.includes("לא"))) {
-        continue;
-      }
-
-      // בדיקה: האם עבר את מכסת המשמרות השבועית?
-      if (ctrl.assignedCount >= ctrl.maxShifts) {
-        continue;
-      }
-
-      // קביעת שעות המשמרת
-      let hours = "";
-      if (dayIdx === 5) { // יום שישי
-        hours = "06:00-14:30";
-      } else if (dayIdx === 6) { // מוצ"ש
-        hours = "19:30-23:30";
-      } else {
-        // ימי חול: חלוקה לבוקר וערב כדי שתהיה הגנה לאורך כל היום
-        if (!morningShiftAssigned) {
-          hours = "06:00-16:00";
-          morningShiftAssigned = true;
-        } else {
-          hours = "13:00-23:00";
-        }
-      }
-
-      // עדכון השיבוץ אם נמצאה משמרת פנויה ביום הזה
-      if (ctrl.schedule[dayIdx] === "-") {
-        ctrl.schedule[dayIdx] = hours;
-        ctrl.assignedCount++;
-        
-        // הגבלה: בקר אחד לבוקר ובקר אחד לערב ביום רגיל (אפשר להגדיל אם צריך יותר)
-        // אם כבר שיבצנו 2 בקרים ליום חול, נעבור ליום הבא
-        let assignedToday = controllers.filter(c => c.schedule[dayIdx] !== "-").length;
-        if (dayIdx < 5 && assignedToday >= 2) break; 
-      }
-    }
+    // התאמת רוחב עמודות אוטומטית
+    newSheet.getUsedRange().getFormat().autofitColumns();
   });
 
-  // 4. בניית הטבלה החדשה מתחת לטבלה הקיימת
-  let startPrintRow = lastRow + 4; // רווח של 4 שורות
+  // העברת הפוקוס לגיליון האילוצים (שבו המשתמש עובד בדרך כלל)
+  workbook.getWorksheet("אילוצים_שבועיים").activate();
   
-  // כותרות הטבלה
-  let headers = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
-  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).setValues(headers);
-  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).getFormat().getFont().setBold(true);
-  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).getFormat().getFill().setColor("#4472C4");
-  sheet.getRangeByIndexes(startPrintRow, 1, 1, 8).getFormat().getFont().setColor("white");
-
-  // נתוני הבקרים
-  let tableData: string[][] = [];
-  controllers.forEach(ctrl => {
-    tableData.push([ctrl.name, ...ctrl.schedule]);
-  });
-
-  let dataRange = sheet.getRangeByIndexes(startPrintRow + 1, 1, tableData.length, 8);
-  dataRange.setValues(tableData);
-
-  // עיצוב גבולות (Borders)
-  let wholeTable = sheet.getRangeByIndexes(startPrintRow, 1, tableData.length + 1, 8);
-  wholeTable.getFormat().getRangeBorder("EdgeLeft").setStyle("Continuous");
-  wholeTable.getFormat().getRangeBorder("EdgeRight").setStyle("Continuous");
-  wholeTable.getFormat().getRangeBorder("EdgeTop").setStyle("Continuous");
-  wholeTable.getFormat().getRangeBorder("EdgeBottom").setStyle("Continuous");
-  wholeTable.getFormat().getRangeBorder("InsideHorizontal").setStyle("Continuous");
-  wholeTable.getFormat().getRangeBorder("InsideVertical").setStyle("Continuous");
-  wholeTable.getFormat().getHorizontalAlignment() === "Center";
-
-  console.log("הסידור הושלם! הטבלה מופיעה בשורה " + (startPrintRow + 1));
+  console.log("השלד למערכת הניהול נבנה בהצלחה! כעת ניתן למלא את הנתונים בטבלאות.");
 }
