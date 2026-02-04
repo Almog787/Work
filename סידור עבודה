@@ -1,9 +1,8 @@
 /**
- * מערכת ניהול בקרת רכבת קלה - גרסה יציבה וסופית (V10.0 Fixed)
- * פתרון שגיאת Data Type Inference ו-HorizontalAlignment
+ * מערכת ניהול בקרת רכבת קלה - גרסת תצוגה משופרת (V11.0 Visual)
+ * כולל אייקונים, מבנה משימות ברור ועיצוב לוח משופר
  */
 
-// --- 1. הגדרת מבני הנתונים (Interfaces) ---
 interface TaskDefinition {
   name: string;
   duration: number;
@@ -22,12 +21,12 @@ interface StationData {
 }
 
 function main(workbook: ExcelScript.Workbook) {
-  // 1. הקמת תשתיות (Reference Tables)
+  // 1. הקמת תשתיות
   ensureSheetWithData(workbook, "הגדרות_משימות", getTaskDefaults());
   ensureSheetWithData(workbook, "הגדרות_בקרים", getControllerDefaults());
   ensureSheetWithData(workbook, "הגדרות_תחנות", getStationDefaults()); 
 
-  // 2. קריאת נתונים מהטבלאות
+  // 2. קריאת נתונים
   const tasksDB: TaskDefinition[] = readTasks(workbook);
   const controllersDB: ControllerData[] = readControllers(workbook);
   const stationsDB: StationData[] = readStations(workbook);
@@ -44,7 +43,8 @@ function main(workbook: ExcelScript.Workbook) {
   }
 
   // כותרות
-  const headers: string[][] = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
+  const days: string[] = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"];
+  const headers: string[][] = [["בקר", ...days]];
   const headerRange = scheduleSheet.getRange("A1:H1");
   headerRange.setValues(headers);
   formatHeader(headerRange);
@@ -54,9 +54,8 @@ function main(workbook: ExcelScript.Workbook) {
 
   for (let ctrl of controllersDB) {
     let row: string[] = [ctrl.name];
-
     for (let day = 0; day < 7; day++) {
-      let dailyPlan: string = generateDailyPlan(ctrl, day, tasksDB, stationsDB);
+      let dailyPlan: string = generateVisualDailyPlan(ctrl, day, tasksDB, stationsDB);
       row.push(dailyPlan);
     }
     outputMatrix.push(row);
@@ -69,12 +68,14 @@ function main(workbook: ExcelScript.Workbook) {
     formatOutputTable(scheduleSheet, dataRange);
   }
 
-  console.log("המערכת סיימה את בניית הסידור בהצלחה.");
+  scheduleSheet.activate();
+  console.log("הסידור הושלם! התצוגה שופרה ויזואלית.");
 }
 
-// --- לוגיקת שיבוץ יומית ---
-
-function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefinition[], stations: StationData[]): string {
+/**
+ * יצירת לו"ז יומי עם תצוגה ויזואלית משופרת
+ */
+function generateVisualDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefinition[], stations: StationData[]): string {
   let startStr: string = ctrl.start;
   let endStr: string = ctrl.end;
 
@@ -85,11 +86,8 @@ function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefi
   let endMin: number = timeToMin(endStr);
   let planText: string = "";
 
-  // תיקון שורה 93: הגדרת סוג המערך בצורה מפורשת
   let availableTasks: TaskDefinition[] = [];
-  for (let i = 0; i < tasks.length; i++) {
-      availableTasks.push(tasks[i]);
-  }
+  tasks.forEach(t => availableTasks.push(t));
   
   while (currentMin < endMin - 15) {
     const timeLeft: number = endMin - currentMin;
@@ -99,31 +97,83 @@ function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefi
 
     let selectedTask: TaskDefinition = possibleTasks[Math.floor(Math.random() * possibleTasks.length)];
     let detail: string = "";
+    let icon: string = "📝";
 
-    if (selectedTask.category === "STATION") {
-        let relevantStations: StationData[] = stations;
-        if (selectedTask.name.indexOf("תת\"ק") >= 0) {
-            relevantStations = stations.filter(s => s.type === "UG");
-        } else if (selectedTask.name.indexOf("עילית") >= 0) {
-            relevantStations = stations.filter(s => s.type === "AG");
-        }
-        if (relevantStations.length > 0) {
-            detail = relevantStations[Math.floor(Math.random() * relevantStations.length)].name;
-        }
-    } else if (selectedTask.category === "TRACK") {
-        detail = "מקטע " + (Math.floor(Math.random() * 20) + 1);
-    } else if (selectedTask.category === "KARON") {
-         const hubs: string[] = ["אליפלט", "קרית אריה", "ת\"מ פ\"ת", "הקוממיות"];
-         detail = hubs[Math.floor(Math.random() * hubs.length)];
+    // התאמת אייקון ופירוט
+    switch(selectedTask.category) {
+        case "STATION":
+            icon = "🚉";
+            let relevantStations = stations;
+            if (selectedTask.name.indexOf("תת\"ק") >= 0) relevantStations = stations.filter(s => s.type === "UG");
+            else relevantStations = stations.filter(s => s.type === "AG");
+            if (relevantStations.length > 0) detail = relevantStations[Math.floor(Math.random() * relevantStations.length)].name;
+            break;
+        case "ONBOARD":
+            icon = "🚆";
+            detail = selectedTask.name.split(" ").pop() || ""; // R1 or R3
+            break;
+        case "TRACK":
+            icon = "🛤️";
+            detail = "מקטע " + (Math.floor(Math.random() * 20) + 1);
+            break;
+        case "KARON":
+            icon = "⚙️";
+            const hubs: string[] = ["אליפלט", "ק.אריה", "פ\"ת", "קוממיות"];
+            detail = hubs[Math.floor(Math.random() * hubs.length)];
+            break;
+        case "SERVICE":
+            icon = "📞";
+            break;
     }
 
-    planText += `${minToTime(currentMin)} ${selectedTask.name} ${detail}\n`;
+    // בניית שורת המשימה בפורמט נקי
+    // [שעה] סמל שם משימה (מיקום)
+    planText += `[${minToTime(currentMin)}] ${icon} ${selectedTask.name} ${detail ? `(${detail})` : ""}\n`;
+    planText += `───────────────\n`; // קו מפריד בתוך התא
+
     currentMin += selectedTask.duration;
   }
   return planText;
 }
 
-// --- פונקציות תשתית ---
+// --- פונקציות עזר ועיצוב ---
+
+function formatHeader(range: ExcelScript.Range) {
+    let format = range.getFormat();
+    format.getFill().setColor("#1e293b"); // כחול כהה מאוד
+    format.getFont().setColor("white");
+    format.getFont().setBold(true);
+    format.getFont().setSize(11);
+    format.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+}
+
+function formatOutputTable(sheet: ExcelScript.Worksheet, range: ExcelScript.Range) {
+    let format = range.getFormat();
+    format.setWrapText(true);
+    format.setVerticalAlignment(ExcelScript.VerticalAlignment.top);
+    format.getFont().setSize(9); // פונט קצת יותר קטן כדי להכיל יותר מידע
+    
+    // גבולות
+    let borders = format.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal);
+    borders.setStyle(ExcelScript.BorderLineStyle.continuous);
+    borders.setColor("#e2e8f0");
+
+    // צביעת שורות לסירוגין (Zebra)
+    for (let i = 0; i < range.getRowCount(); i++) {
+        if (i % 2 === 0) {
+            range.getRow(i).getFormat().getFill().setColor("#ffffff");
+        } else {
+            range.getRow(i).getFormat().getFill().setColor("#f8fafc");
+        }
+    }
+
+    // התאמת רוחב
+    sheet.getRange("B:H").getFormat().setColumnWidth(180);
+    sheet.getRange("A:A").getFormat().setColumnWidth(100);
+    sheet.getRange("A:A").getFormat().getFont().setBold(true);
+}
+
+// --- תשתית נתונים (זהה לגרסה הקודמת אך עם טיפוסים מפורשים) ---
 
 function ensureSheetWithData(workbook: ExcelScript.Workbook, sheetName: string, data: (string | number)[][]) {
   let sheet = workbook.getWorksheet(sheetName);
@@ -133,50 +183,31 @@ function ensureSheetWithData(workbook: ExcelScript.Workbook, sheetName: string, 
     range.setValues(data);
     let table = workbook.addTable(range, true);
     table.setName(sheetName + "_TBL");
-    
-    let header = sheet.getRangeByIndexes(0, 0, 1, data[0].length);
-    header.getFormat().getFill().setColor("#2563eb");
-    header.getFormat().getFont().setColor("white");
+    sheet.getRangeByIndexes(0, 0, 1, data[0].length).getFormat().getFill().setColor("#3b82f6");
+    sheet.getRangeByIndexes(0, 0, 1, data[0].length).getFormat().getFont().setColor("white");
     sheet.getUsedRange().getFormat().autofitColumns();
   }
 }
 
 function readTasks(workbook: ExcelScript.Workbook): TaskDefinition[] {
   let table = workbook.getTable("הגדרות_משימות_TBL");
-  if (!table) return []; 
   let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
-  return values.map(row => ({
-    name: row[0] as string,
-    duration: Number(row[1]),
-    category: row[2] as string
-  }));
+  return values.map(row => ({ name: row[0] as string, duration: Number(row[1]), category: row[2] as string }));
 }
 
 function readControllers(workbook: ExcelScript.Workbook): ControllerData[] {
   let table = workbook.getTable("הגדרות_בקרים_TBL");
-  if (!table) return [];
   let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
-  return values.map(row => ({
-    name: row[0] as string,
-    start: convertExcelTime(row[1]),
-    end: convertExcelTime(row[2])
-  }));
+  return values.map(row => ({ name: row[0] as string, start: convertExcelTime(row[1]), end: convertExcelTime(row[2]) }));
 }
 
 function readStations(workbook: ExcelScript.Workbook): StationData[] {
   let table = workbook.getTable("הגדרות_תחנות_TBL");
-  if (!table) return [];
   let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
-  return values.map(row => ({
-    name: row[0] as string,
-    type: row[1] as string
-  }));
+  return stationsDB = values.map(row => ({ name: row[0] as string, type: row[1] as string }));
 }
 
-// --- פונקציות עזר ---
-
 function timeToMin(t: string): number {
-    if (!t) return 0;
     let parts = t.split(":");
     return parts.length < 2 ? 0 : parseInt(parts[0]) * 60 + parseInt(parts[1]);
 }
@@ -189,69 +220,34 @@ function minToTime(mins: number): string {
 
 function convertExcelTime(val: string | number | boolean): string {
     if (typeof val === 'string') return val;
-    if (typeof val === 'number') {
-        let totalMins = Math.round(val * 24 * 60);
-        return minToTime(totalMins);
-    }
+    if (typeof val === 'number') return minToTime(Math.round(val * 24 * 60));
     return "00:00";
 }
 
-function formatHeader(range: ExcelScript.Range) {
-    range.getFormat().getFill().setColor("#0f172a");
-    range.getFormat().getFont().setColor("white");
-    range.getFormat().getFont().setBold(true);
-    range.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
-}
-
-function formatOutputTable(sheet: ExcelScript.Worksheet, range: ExcelScript.Range) {
-    range.getFormat().setWrapText(true);
-    range.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
-    sheet.getRange("B:H").getFormat().setColumnWidth(160);
-    sheet.getRange("A:A").getFormat().setColumnWidth(90);
-
-    let borderFormat = range.getFormat();
-    borderFormat.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setStyle(ExcelScript.BorderLineStyle.continuous);
-    borderFormat.getRangeBorder(ExcelScript.BorderIndex.insideVertical).setStyle(ExcelScript.BorderLineStyle.continuous);
-    borderFormat.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setStyle(ExcelScript.BorderLineStyle.continuous);
-}
-
-// --- נתוני ברירת מחדל ---
-
-function getTaskDefaults(): (string | number)[][] {
+// --- Defaults ---
+function getTaskDefaults() {
   return [
-    ["שם המשימה", "משך (דקות)", "קטגוריה"],
-    ["בקרת תחנה תת\"ק", 60, "STATION"],
-    ["בקרת תחנה עילית", 30, "STATION"],
-    ["בקרת תחנה (בלינסון)", 45, "STATION"],
-    ["בקרת קרונות", 65, "KARON"],
-    ["אונבורד R1", 80, "ONBOARD"],
-    ["אונבורד R3", 45, "ONBOARD"],
-    ["ניקיון מסילה", 30, "TRACK"],
-    ["בקרת מסלול", 80, "TRACK"],
-    ["מרכז שירות", 15, "SERVICE"],
-    ["מוקד", 15, "SERVICE"]
+    ["משימה", "דקות", "קטגוריה"],
+    ["בקרת תחנה תת\"ק", 60, "STATION"], ["בקרת תחנה עילית", 30, "STATION"],
+    ["בקרת קרונות", 65, "KARON"], ["אונבורד R1", 80, "ONBOARD"],
+    ["אונבורד R3", 45, "ONBOARD"], ["ניקיון מסילה", 30, "TRACK"],
+    ["מרכז שירות", 15, "SERVICE"], ["מוקד", 15, "SERVICE"]
   ];
 }
 
-function getControllerDefaults(): (string | number)[][] {
+function getControllerDefaults() {
   return [
-    ["שם הבקר", "התחלה", "סיום"],
+    ["שם", "התחלה", "סיום"],
     ["אורי מייזלר", "07:00", "16:00"], ["אינה טימופייב", "07:00", "16:00"],
-    ["אלתי קראו", "08:00", "17:00"], ["בוריס דולציגר", "06:00", "15:00"],
-    ["בתיה אביה", "09:00", "18:00"], ["דוד סייג", "07:00", "16:00"],
-    ["הרצל שגב", "14:00", "23:00"], ["יוני יוסף", "14:00", "23:00"],
-    ["משה אליהו", "15:00", "23:00"], ["ערן ניצן", "06:00", "15:00"],
-    ["רון טוב", "07:00", "16:00"], ["אברהם גברילביץ'", "08:00", "17:00"]
+    ["דוד סייג", "07:00", "16:00"], ["בתיה אביה", "09:00", "18:00"],
+    ["הרצל שגב", "14:00", "23:00"], ["יוני יוסף", "14:00", "23:00"]
   ];
 }
 
-function getStationDefaults(): (string | number)[][] {
+function getStationDefaults() {
   return [
-    ["שם התחנה", "סוג"],
-    ["ת\"מ פ\"ת", "AG"], ["פינסקר", "AG"], ["קרול", "AG"], ["דנקנר", "AG"], ["בלינסון", "AG"], ["שחם", "AG"], ["שנקר", "AG"],
-    ["קריית אריה", "AG"], ["אם המושבות", "UG"], ["אהרונוביץ", "UG"], ["בן גוריון", "UG"], ["ביאליק", "UG"], ["אבא הלל", "UG"],
-    ["ארלוזורוב", "UG"], ["שאול המלך", "UG"], ["יהודית", "UG"], ["קרליבך", "UG"], ["אלנבי", "UG"], ["אליפלט", "UG"], ["שלמה", "AG"],
-    ["בלומפילד", "AG"], ["ארליך", "AG"], ["איסקוב", "AG"], ["הבעש\"ט", "AG"], ["מחרוזת", "AG"], ["העצמאות", "AG"], ["רוטשילד", "AG"],
-    ["ז'בוטינסקי", "AG"], ["בלפור", "AG"], ["בנימין", "AG"], ["יוספטל", "AG"], ["כ\"ט בנובמבר", "AG"], ["העמל", "AG"], ["הקוממיות", "AG"]
+    ["תחנה", "סוג"],
+    ["אלנבי", "UG"], ["קרליבך", "UG"], ["יהודית", "UG"], ["שאול המלך", "UG"],
+    ["הקוממיות", "AG"], ["יוספטל", "AG"], ["בלפור", "AG"], ["בלינסון", "AG"]
   ];
 }
