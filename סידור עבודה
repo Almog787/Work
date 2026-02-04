@@ -1,6 +1,6 @@
 /**
- * מערכת ניהול בקרת רכבת קלה - גרסה מלאה (Full Production)
- * כולל: 34 תחנות, זמנים מדויקים, אימות נתונים ולוגיקת שיבוץ רציפה.
+ * מערכת ניהול בקרת רכבת קלה - גרסה מתוקנת (V9.0 Fixed)
+ * תוקנה שגיאת ה-HorizontalAlignment
  */
 
 // --- 1. הגדרת טיפוסים (Types) ---
@@ -25,9 +25,9 @@ function main(workbook: ExcelScript.Workbook) {
   // 1. הקמת תשתיות (Reference Tables) עם נתונים מלאים
   ensureSheetWithData(workbook, "הגדרות_משימות", getTaskDefaults());
   ensureSheetWithData(workbook, "הגדרות_בקרים", getControllerDefaults());
-  ensureSheetWithData(workbook, "הגדרות_תחנות", getStationDefaults()); // רשימת ה-34 המלאה
+  ensureSheetWithData(workbook, "הגדרות_תחנות", getStationDefaults()); 
 
-  // 2. קריאת נתונים מהטבלאות (כדי לאפשר למשתמש לערוך בעתיד)
+  // 2. קריאת נתונים מהטבלאות
   const tasksDB = readTasks(workbook);
   const controllersDB = readControllers(workbook);
   const stationsDB = readStations(workbook);
@@ -39,7 +39,10 @@ function main(workbook: ExcelScript.Workbook) {
   }
   
   // ניקוי זהיר
-  scheduleSheet.getUsedRange()?.clear();
+  let usedRange = scheduleSheet.getUsedRange();
+  if (usedRange) {
+    usedRange.clear();
+  }
 
   // כותרות
   const headers = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
@@ -47,8 +50,7 @@ function main(workbook: ExcelScript.Workbook) {
   headerRange.setValues(headers);
   formatHeader(headerRange);
 
-  // 4. מנוע השיבוץ (The Scheduler Logic)
-  // אנו בונים מטריצה של טקסטים
+  // 4. מנוע השיבוץ
   let outputMatrix: (string | number | boolean)[][] = [];
 
   for (let ctrl of controllersDB) {
@@ -77,7 +79,6 @@ function main(workbook: ExcelScript.Workbook) {
 // --- לוגיקת שיבוץ יומית ---
 
 function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefinition[], stations: StationData[]): string {
-  // התאמת שעות לפי יום בשבוע
   let startStr = ctrl.start;
   let endStr = ctrl.end;
 
@@ -88,9 +89,12 @@ function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefi
   let endMin = timeToMin(endStr);
   let planText = "";
 
-  // יצירת מאגר משימות זמין ליום (Backlog)
-  // אנו משכפלים את המשימות כדי לא לפגוע במאגר המקורי
-  let availableTasks = [...tasks]; 
+  // יצירת מאגר משימות זמין ליום
+  let availableTasks = [];
+  // העתקה ידנית למערך חדש
+  for (let i = 0; i < tasks.length; i++) {
+      availableTasks.push(tasks[i]);
+  }
   
   // לולאה למילוי הזמן
   while (currentMin < endMin - 15) {
@@ -101,17 +105,16 @@ function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefi
     
     if (possibleTasks.length === 0) break;
 
-    // בחירה אקראית מושכלת
+    // בחירה אקראית
     let selectedTask = possibleTasks[Math.floor(Math.random() * possibleTasks.length)];
     
-    // יצירת פירוט (למשל: איזה תחנה?)
+    // יצירת פירוט
     let detail = "";
     if (selectedTask.category === "STATION") {
-        // בחירת תחנה מתאימה (אם זו משימת תת-קרקע, נבחר תחנת UG)
         let relevantStations = stations;
-        if (selectedTask.name.includes("תת\"ק")) {
+        if (selectedTask.name.indexOf("תת\"ק") >= 0) {
             relevantStations = stations.filter(s => s.type === "UG");
-        } else if (selectedTask.name.includes("עילית")) {
+        } else if (selectedTask.name.indexOf("עילית") >= 0) {
             relevantStations = stations.filter(s => s.type === "AG");
         }
         
@@ -121,7 +124,6 @@ function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefi
     } else if (selectedTask.category === "TRACK") {
         detail = "מקטע " + (Math.floor(Math.random() * 20) + 1);
     } else if (selectedTask.category === "KARON") {
-         // קרונות בדרך כלל בתחנות קצה
          const hubs = ["אליפלט", "קרית אריה", "ת\"מ פ\"ת", "הקוממיות"];
          detail = hubs[Math.floor(Math.random() * hubs.length)];
     }
@@ -144,17 +146,14 @@ function ensureSheetWithData(workbook: ExcelScript.Workbook, sheetName: string, 
   if (!sheet) {
     sheet = workbook.addWorksheet(sheetName);
     
-    // כתיבת הנתונים
     let range = sheet.getRangeByIndexes(0, 0, data.length, data[0].length);
     range.setValues(data);
     
-    // יצירת טבלה
     let table = workbook.addTable(range, true);
     table.setName(sheetName + "_TBL");
     
-    // עיצוב
     let header = sheet.getRange("A1:Z1");
-    header.getFormat().getFill().setColor("#2563eb"); // כחול
+    header.getFormat().getFill().setColor("#2563eb");
     header.getFormat().getFont().setColor("white");
     sheet.getUsedRange().getFormat().autofitColumns();
   }
@@ -166,10 +165,10 @@ function readTasks(workbook: ExcelScript.Workbook): TaskDefinition[] {
   let table = workbook.getTable("הגדרות_משימות_TBL");
   if (!table) return []; 
   
-  let values = table.getRangeBetweenHeaderAndTotal().getValues();
+  // שימוש ב-any כדי למנוע בעיות המרה בקריאה ראשונית, ואז המרה יזומה
+  let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
   let tasks: TaskDefinition[] = [];
   
-  // המרה בטוחה של טיפוסים
   for (let row of values) {
     tasks.push({
       name: row[0] as string,
@@ -184,7 +183,7 @@ function readControllers(workbook: ExcelScript.Workbook): ControllerData[] {
   let table = workbook.getTable("הגדרות_בקרים_TBL");
   if (!table) return [];
   
-  let values = table.getRangeBetweenHeaderAndTotal().getValues();
+  let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
   let ctrls: ControllerData[] = [];
   
   for (let row of values) {
@@ -201,7 +200,7 @@ function readStations(workbook: ExcelScript.Workbook): StationData[] {
   let table = workbook.getTable("הגדרות_תחנות_TBL");
   if (!table) return [];
   
-  let values = table.getRangeBetweenHeaderAndTotal().getValues();
+  let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
   let stations: StationData[] = [];
   
   for (let row of values) {
@@ -216,7 +215,7 @@ function readStations(workbook: ExcelScript.Workbook): StationData[] {
 // --- פונקציות עזר (Utils) ---
 
 function timeToMin(t: string): number {
-    if (!t || typeof t !== "string") return 0;
+    if (!t) return 0;
     let parts = t.split(":");
     if (parts.length < 2) return 0;
     return parseInt(parts[0]) * 60 + parseInt(parts[1]);
@@ -241,19 +240,17 @@ function formatHeader(range: ExcelScript.Range) {
     range.getFormat().getFill().setColor("#0f172a");
     range.getFormat().getFont().setColor("white");
     range.getFormat().getFont().setBold(true);
-    range.getFormat().getHorizontalAlignment() = ExcelScript.HorizontalAlignment.center;
+    // התיקון כאן: שימוש ב-setHorizontalAlignment במקום השמה
+    range.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
 }
 
 function formatOutputTable(sheet: ExcelScript.Worksheet, range: ExcelScript.Range) {
-    // גלישת טקסט
     range.getFormat().setWrapText(true);
     range.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
     
-    // רוחב עמודות
     sheet.getRange("B:H").getFormat().setColumnWidth(160);
     sheet.getRange("A:A").getFormat().setColumnWidth(90);
 
-    // גבולות
     let borderFormat = range.getFormat();
     borderFormat.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setStyle(ExcelScript.BorderLineStyle.continuous);
     borderFormat.getRangeBorder(ExcelScript.BorderIndex.insideVertical).setStyle(ExcelScript.BorderLineStyle.continuous);
@@ -298,11 +295,9 @@ function getControllerDefaults(): (string | number)[][] {
   ];
 }
 
-// רשימת ה-34 המלאה והמדויקת
 function getStationDefaults(): (string | number)[][] {
   return [
     ["שם התחנה", "סוג"],
-    // תחנות פתח תקווה
     ["ת\"מ פ\"ת", "AG"],
     ["פינסקר", "AG"],
     ["קרול", "AG"],
@@ -310,29 +305,25 @@ function getStationDefaults(): (string | number)[][] {
     ["בלינסון", "AG"],
     ["שחם", "AG"],
     ["שנקר", "AG"],
-    // תחנות ר"ג / ב"ב
     ["קריית אריה", "AG"],
     ["אם המושבות", "UG"],
     ["אהרונוביץ", "UG"],
     ["בן גוריון", "UG"],
     ["ביאליק", "UG"],
     ["אבא הלל", "UG"],
-    // תל אביב
     ["ארלוזורוב", "UG"],
     ["שאול המלך", "UG"],
     ["יהודית", "UG"],
     ["קרליבך", "UG"],
     ["אלנבי", "UG"],
-    ["אליפלט", "UG"], // מוגדרת לפעמים כחצי חפורה, נתייחס כ-UG למשימה ארוכה
+    ["אליפלט", "UG"],
     ["שלמה", "AG"],
     ["בלומפילד", "AG"],
-    // יפו
     ["ארליך", "AG"],
     ["איסקוב", "AG"],
     ["הבעש\"ט", "AG"],
     ["מחרוזת", "AG"],
     ["העצמאות", "AG"],
-    // בת ים
     ["רוטשילד", "AG"],
     ["ז'בוטינסקי", "AG"],
     ["בלפור", "AG"],
