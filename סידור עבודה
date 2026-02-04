@@ -1,9 +1,9 @@
 /**
- * מערכת ניהול בקרת רכבת קלה - גרסה מתוקנת (V9.0 Fixed)
- * תוקנה שגיאת ה-HorizontalAlignment
+ * מערכת ניהול בקרת רכבת קלה - גרסה יציבה וסופית (V10.0 Fixed)
+ * פתרון שגיאת Data Type Inference ו-HorizontalAlignment
  */
 
-// --- 1. הגדרת טיפוסים (Types) ---
+// --- 1. הגדרת מבני הנתונים (Interfaces) ---
 interface TaskDefinition {
   name: string;
   duration: number;
@@ -22,15 +22,15 @@ interface StationData {
 }
 
 function main(workbook: ExcelScript.Workbook) {
-  // 1. הקמת תשתיות (Reference Tables) עם נתונים מלאים
+  // 1. הקמת תשתיות (Reference Tables)
   ensureSheetWithData(workbook, "הגדרות_משימות", getTaskDefaults());
   ensureSheetWithData(workbook, "הגדרות_בקרים", getControllerDefaults());
   ensureSheetWithData(workbook, "הגדרות_תחנות", getStationDefaults()); 
 
   // 2. קריאת נתונים מהטבלאות
-  const tasksDB = readTasks(workbook);
-  const controllersDB = readControllers(workbook);
-  const stationsDB = readStations(workbook);
+  const tasksDB: TaskDefinition[] = readTasks(workbook);
+  const controllersDB: ControllerData[] = readControllers(workbook);
+  const stationsDB: StationData[] = readStations(workbook);
 
   // 3. הכנת גיליון הסידור
   let scheduleSheet = workbook.getWorksheet("סידור_עבודה_שבועי");
@@ -38,27 +38,25 @@ function main(workbook: ExcelScript.Workbook) {
     scheduleSheet = workbook.addWorksheet("סידור_עבודה_שבועי");
   }
   
-  // ניקוי זהיר
   let usedRange = scheduleSheet.getUsedRange();
   if (usedRange) {
     usedRange.clear();
   }
 
   // כותרות
-  const headers = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
+  const headers: string[][] = [["שם הבקר", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"]];
   const headerRange = scheduleSheet.getRange("A1:H1");
   headerRange.setValues(headers);
   formatHeader(headerRange);
 
   // 4. מנוע השיבוץ
-  let outputMatrix: (string | number | boolean)[][] = [];
+  let outputMatrix: string[][] = [];
 
   for (let ctrl of controllersDB) {
     let row: string[] = [ctrl.name];
 
     for (let day = 0; day < 7; day++) {
-      // יצירת לו"ז יומי עבור הבקר
-      let dailyPlan = generateDailyPlan(ctrl, day, tasksDB, stationsDB);
+      let dailyPlan: string = generateDailyPlan(ctrl, day, tasksDB, stationsDB);
       row.push(dailyPlan);
     }
     outputMatrix.push(row);
@@ -68,8 +66,6 @@ function main(workbook: ExcelScript.Workbook) {
   if (outputMatrix.length > 0) {
     let dataRange = scheduleSheet.getRangeByIndexes(1, 0, outputMatrix.length, 8);
     dataRange.setValues(outputMatrix);
-
-    // עיצוב סופי
     formatOutputTable(scheduleSheet, dataRange);
   }
 
@@ -79,146 +75,110 @@ function main(workbook: ExcelScript.Workbook) {
 // --- לוגיקת שיבוץ יומית ---
 
 function generateDailyPlan(ctrl: ControllerData, dayIdx: number, tasks: TaskDefinition[], stations: StationData[]): string {
-  let startStr = ctrl.start;
-  let endStr = ctrl.end;
+  let startStr: string = ctrl.start;
+  let endStr: string = ctrl.end;
 
-  if (dayIdx === 5) { startStr = "06:00"; endStr = "14:30"; } // שישי
-  if (dayIdx === 6) { startStr = "19:00"; endStr = "24:00"; } // מוצ"ש
+  if (dayIdx === 5) { startStr = "06:00"; endStr = "14:30"; } 
+  if (dayIdx === 6) { startStr = "19:00"; endStr = "24:00"; } 
 
-  let currentMin = timeToMin(startStr);
-  let endMin = timeToMin(endStr);
-  let planText = "";
+  let currentMin: number = timeToMin(startStr);
+  let endMin: number = timeToMin(endStr);
+  let planText: string = "";
 
-  // יצירת מאגר משימות זמין ליום
-  let availableTasks = [];
-  // העתקה ידנית למערך חדש
+  // תיקון שורה 93: הגדרת סוג המערך בצורה מפורשת
+  let availableTasks: TaskDefinition[] = [];
   for (let i = 0; i < tasks.length; i++) {
       availableTasks.push(tasks[i]);
   }
   
-  // לולאה למילוי הזמן
   while (currentMin < endMin - 15) {
-    const timeLeft = endMin - currentMin;
-
-    // סינון משימות שניתן לבצע בזמן שנותר
-    let possibleTasks = availableTasks.filter(t => t.duration <= timeLeft);
+    const timeLeft: number = endMin - currentMin;
+    let possibleTasks: TaskDefinition[] = availableTasks.filter(t => t.duration <= timeLeft);
     
     if (possibleTasks.length === 0) break;
 
-    // בחירה אקראית
-    let selectedTask = possibleTasks[Math.floor(Math.random() * possibleTasks.length)];
-    
-    // יצירת פירוט
-    let detail = "";
+    let selectedTask: TaskDefinition = possibleTasks[Math.floor(Math.random() * possibleTasks.length)];
+    let detail: string = "";
+
     if (selectedTask.category === "STATION") {
-        let relevantStations = stations;
+        let relevantStations: StationData[] = stations;
         if (selectedTask.name.indexOf("תת\"ק") >= 0) {
             relevantStations = stations.filter(s => s.type === "UG");
         } else if (selectedTask.name.indexOf("עילית") >= 0) {
             relevantStations = stations.filter(s => s.type === "AG");
         }
-        
         if (relevantStations.length > 0) {
             detail = relevantStations[Math.floor(Math.random() * relevantStations.length)].name;
         }
     } else if (selectedTask.category === "TRACK") {
         detail = "מקטע " + (Math.floor(Math.random() * 20) + 1);
     } else if (selectedTask.category === "KARON") {
-         const hubs = ["אליפלט", "קרית אריה", "ת\"מ פ\"ת", "הקוממיות"];
+         const hubs: string[] = ["אליפלט", "קרית אריה", "ת\"מ פ\"ת", "הקוממיות"];
          detail = hubs[Math.floor(Math.random() * hubs.length)];
     }
 
-    // הוספה לטקסט
-    let timeStr = minToTime(currentMin);
-    planText += `${timeStr} ${selectedTask.name} ${detail}\n`;
-
-    // קידום הזמן
+    planText += `${minToTime(currentMin)} ${selectedTask.name} ${detail}\n`;
     currentMin += selectedTask.duration;
   }
-
   return planText;
 }
 
-// --- פונקציות תשתית (Setup) ---
+// --- פונקציות תשתית ---
 
 function ensureSheetWithData(workbook: ExcelScript.Workbook, sheetName: string, data: (string | number)[][]) {
   let sheet = workbook.getWorksheet(sheetName);
   if (!sheet) {
     sheet = workbook.addWorksheet(sheetName);
-    
     let range = sheet.getRangeByIndexes(0, 0, data.length, data[0].length);
     range.setValues(data);
-    
     let table = workbook.addTable(range, true);
     table.setName(sheetName + "_TBL");
     
-    let header = sheet.getRange("A1:Z1");
+    let header = sheet.getRangeByIndexes(0, 0, 1, data[0].length);
     header.getFormat().getFill().setColor("#2563eb");
     header.getFormat().getFont().setColor("white");
     sheet.getUsedRange().getFormat().autofitColumns();
   }
 }
 
-// --- פונקציות קריאת נתונים (Read) ---
-
 function readTasks(workbook: ExcelScript.Workbook): TaskDefinition[] {
   let table = workbook.getTable("הגדרות_משימות_TBL");
   if (!table) return []; 
-  
-  // שימוש ב-any כדי למנוע בעיות המרה בקריאה ראשונית, ואז המרה יזומה
   let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
-  let tasks: TaskDefinition[] = [];
-  
-  for (let row of values) {
-    tasks.push({
-      name: row[0] as string,
-      duration: Number(row[1]),
-      category: row[2] as string
-    });
-  }
-  return tasks;
+  return values.map(row => ({
+    name: row[0] as string,
+    duration: Number(row[1]),
+    category: row[2] as string
+  }));
 }
 
 function readControllers(workbook: ExcelScript.Workbook): ControllerData[] {
   let table = workbook.getTable("הגדרות_בקרים_TBL");
   if (!table) return [];
-  
   let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
-  let ctrls: ControllerData[] = [];
-  
-  for (let row of values) {
-      ctrls.push({
-          name: row[0] as string,
-          start: convertExcelTime(row[1]),
-          end: convertExcelTime(row[2])
-      });
-  }
-  return ctrls;
+  return values.map(row => ({
+    name: row[0] as string,
+    start: convertExcelTime(row[1]),
+    end: convertExcelTime(row[2])
+  }));
 }
 
 function readStations(workbook: ExcelScript.Workbook): StationData[] {
   let table = workbook.getTable("הגדרות_תחנות_TBL");
   if (!table) return [];
-  
   let values = table.getRangeBetweenHeaderAndTotal().getValues() as (string | number | boolean)[][];
-  let stations: StationData[] = [];
-  
-  for (let row of values) {
-      stations.push({
-          name: row[0] as string,
-          type: row[1] as string
-      });
-  }
-  return stations;
+  return values.map(row => ({
+    name: row[0] as string,
+    type: row[1] as string
+  }));
 }
 
-// --- פונקציות עזר (Utils) ---
+// --- פונקציות עזר ---
 
 function timeToMin(t: string): number {
     if (!t) return 0;
     let parts = t.split(":");
-    if (parts.length < 2) return 0;
-    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    return parts.length < 2 ? 0 : parseInt(parts[0]) * 60 + parseInt(parts[1]);
 }
 
 function minToTime(mins: number): string {
@@ -240,14 +200,12 @@ function formatHeader(range: ExcelScript.Range) {
     range.getFormat().getFill().setColor("#0f172a");
     range.getFormat().getFont().setColor("white");
     range.getFormat().getFont().setBold(true);
-    // התיקון כאן: שימוש ב-setHorizontalAlignment במקום השמה
     range.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
 }
 
 function formatOutputTable(sheet: ExcelScript.Worksheet, range: ExcelScript.Range) {
     range.getFormat().setWrapText(true);
     range.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top);
-    
     sheet.getRange("B:H").getFormat().setColumnWidth(160);
     sheet.getRange("A:A").getFormat().setColumnWidth(90);
 
@@ -257,7 +215,7 @@ function formatOutputTable(sheet: ExcelScript.Worksheet, range: ExcelScript.Rang
     borderFormat.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setStyle(ExcelScript.BorderLineStyle.continuous);
 }
 
-// --- נתונים סטטיים (Data Source) ---
+// --- נתוני ברירת מחדל ---
 
 function getTaskDefaults(): (string | number)[][] {
   return [
@@ -278,59 +236,22 @@ function getTaskDefaults(): (string | number)[][] {
 function getControllerDefaults(): (string | number)[][] {
   return [
     ["שם הבקר", "התחלה", "סיום"],
-    ["אורי מייזלר", "07:00", "16:00"],
-    ["אינה טימופייב", "07:00", "16:00"],
-    ["אלתי קראו", "08:00", "17:00"],
-    ["בוריס דולציגר", "06:00", "15:00"],
-    ["בתיה אביה", "09:00", "18:00"],
-    ["דוד סייג", "07:00", "16:00"],
-    ["הרצל שגב", "14:00", "23:00"],
-    ["יוני יוסף", "14:00", "23:00"],
-    ["משה אליהו", "15:00", "23:00"],
-    ["ערן ניצן", "06:00", "15:00"],
-    ["רון טוב", "07:00", "16:00"],
-    ["אברהם גברילביץ'", "08:00", "17:00"],
-    ["גדי בן אור", "10:00", "19:00"],
-    ["יוני ניסן", "12:00", "21:00"]
+    ["אורי מייזלר", "07:00", "16:00"], ["אינה טימופייב", "07:00", "16:00"],
+    ["אלתי קראו", "08:00", "17:00"], ["בוריס דולציגר", "06:00", "15:00"],
+    ["בתיה אביה", "09:00", "18:00"], ["דוד סייג", "07:00", "16:00"],
+    ["הרצל שגב", "14:00", "23:00"], ["יוני יוסף", "14:00", "23:00"],
+    ["משה אליהו", "15:00", "23:00"], ["ערן ניצן", "06:00", "15:00"],
+    ["רון טוב", "07:00", "16:00"], ["אברהם גברילביץ'", "08:00", "17:00"]
   ];
 }
 
 function getStationDefaults(): (string | number)[][] {
   return [
     ["שם התחנה", "סוג"],
-    ["ת\"מ פ\"ת", "AG"],
-    ["פינסקר", "AG"],
-    ["קרול", "AG"],
-    ["דנקנר", "AG"],
-    ["בלינסון", "AG"],
-    ["שחם", "AG"],
-    ["שנקר", "AG"],
-    ["קריית אריה", "AG"],
-    ["אם המושבות", "UG"],
-    ["אהרונוביץ", "UG"],
-    ["בן גוריון", "UG"],
-    ["ביאליק", "UG"],
-    ["אבא הלל", "UG"],
-    ["ארלוזורוב", "UG"],
-    ["שאול המלך", "UG"],
-    ["יהודית", "UG"],
-    ["קרליבך", "UG"],
-    ["אלנבי", "UG"],
-    ["אליפלט", "UG"],
-    ["שלמה", "AG"],
-    ["בלומפילד", "AG"],
-    ["ארליך", "AG"],
-    ["איסקוב", "AG"],
-    ["הבעש\"ט", "AG"],
-    ["מחרוזת", "AG"],
-    ["העצמאות", "AG"],
-    ["רוטשילד", "AG"],
-    ["ז'בוטינסקי", "AG"],
-    ["בלפור", "AG"],
-    ["בנימין", "AG"],
-    ["יוספטל", "AG"],
-    ["כ\"ט בנובמבר", "AG"],
-    ["העמל", "AG"],
-    ["הקוממיות", "AG"]
+    ["ת\"מ פ\"ת", "AG"], ["פינסקר", "AG"], ["קרול", "AG"], ["דנקנר", "AG"], ["בלינסון", "AG"], ["שחם", "AG"], ["שנקר", "AG"],
+    ["קריית אריה", "AG"], ["אם המושבות", "UG"], ["אהרונוביץ", "UG"], ["בן גוריון", "UG"], ["ביאליק", "UG"], ["אבא הלל", "UG"],
+    ["ארלוזורוב", "UG"], ["שאול המלך", "UG"], ["יהודית", "UG"], ["קרליבך", "UG"], ["אלנבי", "UG"], ["אליפלט", "UG"], ["שלמה", "AG"],
+    ["בלומפילד", "AG"], ["ארליך", "AG"], ["איסקוב", "AG"], ["הבעש\"ט", "AG"], ["מחרוזת", "AG"], ["העצמאות", "AG"], ["רוטשילד", "AG"],
+    ["ז'בוטינסקי", "AG"], ["בלפור", "AG"], ["בנימין", "AG"], ["יוספטל", "AG"], ["כ\"ט בנובמבר", "AG"], ["העמל", "AG"], ["הקוממיות", "AG"]
   ];
 }
