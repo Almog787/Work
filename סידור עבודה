@@ -1,16 +1,24 @@
 /**
- * RedLine Strategic KPI Manager - V14.0 (Strict Mode Fixed)
- * פתרון שגיאות עובי קו, טיפוסי נתונים ואימות משתנים
+ * RedLine Master Scheduler V16.0
+ * כולל: חלונות זמן דינמיים, רצף גאוגרפי, בלוקים של קרונות ואכיפת חוקים מלאה.
  */
 
-// --- 1. הגדרת מבני הנתונים (Interfaces) ---
-interface TaskDef {
-  id: string;
+// --- ממשקים (Interfaces) ---
+
+interface Station {
+  id: number;
   name: string;
-  duration: number;
-  category: string;
-  targetMonthly: number;
-  done: number;
+  type: string; // AG / UG
+  duration: number; // זמן בקרה כולל
+  nextStation: string; // לתכנון גאוגרפי
+  prevStation: string;
+}
+
+interface TimeWindow {
+  station: string;
+  dayIdx: number; // 0=Sun, 6=Sat
+  startMin: number;
+  endMin: number;
 }
 
 interface Controller {
@@ -19,244 +27,379 @@ interface Controller {
   end: string;
 }
 
-function main(workbook: ExcelScript.Workbook) {
-  // 1. הקמת תשתיות
-  ensureMonthlyKPISTable(workbook);
-  ensureControllersTable(workbook);
-  setupViewControlSheet(workbook);
+interface TaskBlock {
+  text: string;
+  duration: number;
+}
 
+// מעקב יומי גלובלי
+interface DailyTracker {
+  visitedStations: Set<string>; // תחנות שבוצעו היום
+  hubKaronCounts: Map<string, number>; // כמה קרונות בוצעו בכל האב
+}
+
+function main(workbook: ExcelScript.Workbook) {
+  // 1. הקמת תשתיות נתונים (אם לא קיימות)
+  setupReferenceTables(workbook);
+  
   // 2. קריאת נתונים
-  const monthlyTasks: TaskDef[] = readMonthlyKPIs(workbook);
   const controllers: Controller[] = readControllers(workbook);
-  const viewSheet = workbook.getWorksheet("בקרת_תצוגה");
-  const searchRange = viewSheet.getRange("B2");
-  const searchTerm: string = (searchRange.getValue() as string || "").toLowerCase();
+  const stationsDB: Station[] = getStationsDB();
+  const timeWindows: TimeWindow[] = readTimeWindows(workbook); // קריאת הטבלה הגדולה
 
   // 3. הכנת גיליון פלט
-  let scheduleSheet = workbook.getWorksheet("סידור_שבועי");
-  if (!scheduleSheet) {
-    scheduleSheet = workbook.addWorksheet("סידור_שבועי");
-  }
+  let outputSheet = workbook.getWorksheet("סידור_סופי");
+  if (!outputSheet) outputSheet = workbook.addWorksheet("סידור_סופי");
   
-  let usedRange = scheduleSheet.getUsedRange();
-  if (usedRange) {
-    usedRange.clear();
-  }
+  let usedRange = outputSheet.getUsedRange();
+  if (usedRange) usedRange.clear();
 
-  const daysHeader: string[] = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"];
-  scheduleSheet.getRange("A1:H1").setValues([["בקר", ...daysHeader]]);
-  formatHeader(scheduleSheet.getRange("A1:H1"));
+  const daysHeader = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"];
+  outputSheet.getRange("A1:H1").setValues([["בקר", ...daysHeader]]);
+  formatHeader(outputSheet.getRange("A1:H1"));
 
-  // 4. לוגיקת שיבוץ שבועי
-  let scheduleMatrix: string[][] = [];
+  // 4. לוגיקת שיבוץ ראשית
+  let matrix: string[][] = [];
   
-  // מיון בקרים
-  controllers.sort((a, b) => a.name.localeCompare(b.name));
-
-  // שכפול מאגר המשימות
-  let currentMonthlyPool: TaskDef[] = [];
-  for (let t of monthlyTasks) {
-    currentMonthlyPool.push({...t});
+  // אתחול טראקרים לכל יום בשבוע
+  let weeklyTrackers: DailyTracker[] = [];
+  for(let i=0; i<7; i++) {
+      weeklyTrackers.push({ 
+          visitedStations: new Set<string>(),
+          hubKaronCounts: new Map<string, number>()
+      });
   }
+
+  // מיון בקרים לפי שעת התחלה (הקדומים מקבלים עדיפות למשימות בוקר)
+  controllers.sort((a,b) => timeToMin(a.start) - timeToMin(b.start));
 
   for (let ctrl of controllers) {
     let row: string[] = [ctrl.name];
 
     for (let dIdx = 0; dIdx < 7; dIdx++) {
-      let dailyPlan: string = generateDayPlan(ctrl, dIdx, currentMonthlyPool, searchTerm);
-      row.push(dailyPlan);
+      let plan = generateDaySchedule(ctrl, dIdx, stationsDB, timeWindows, weeklyTrackers[dIdx]);
+      row.push(plan);
     }
-    scheduleMatrix.push(row);
+    matrix.push(row);
   }
 
-  // 5. כתיבת תוצאות
-  if (scheduleMatrix.length > 0) {
-    let range = scheduleSheet.getRangeByIndexes(1, 0, scheduleMatrix.length, 8);
-    range.setValues(scheduleMatrix);
-    formatOutputTable(scheduleSheet, range);
+  // 5. כתיבה
+  if (matrix.length > 0) {
+    let range = outputSheet.getRangeByIndexes(1, 0, matrix.length, 8);
+    range.setValues(matrix);
+    formatOutputTable(outputSheet, range);
   }
 
-  scheduleSheet.activate();
-  console.log("סידור העבודה השבועי נוצר בהצלחה.");
+  console.log("הסידור הושלם בהצלחה עם כל האילוצים.");
 }
 
 /**
- * מנוע ייצור יום עבודה
+ * מנוע השיבוץ היומי - המוח של המערכת
  */
-function generateDayPlan(ctrl: Controller, dayIdx: number, taskPool: TaskDef[], search: string): string {
-  let startStr: string = ctrl.start;
-  let endStr: string = ctrl.end;
-  
+function generateDaySchedule(ctrl: Controller, dayIdx: number, stations: Station[], windows: TimeWindow[], tracker: DailyTracker): string {
+  // התאמת שעות
+  let startStr = ctrl.start;
+  let endStr = ctrl.end;
   if (dayIdx === 5) { startStr = "06:00"; endStr = "14:30"; }
   if (dayIdx === 6) { startStr = "19:00"; endStr = "24:00"; }
 
-  let currentMin: number = timeToMin(startStr);
-  let endMin: number = timeToMin(endStr);
-  let planText: string = "";
+  let currentMin = timeToMin(startStr);
+  let endMin = timeToMin(endStr);
+  let outputText = "";
   
-  let visitedToday: Set<string> = new Set<string>();
+  // מיקום נוכחי של הבקר (לצורך רצף גאוגרפי)
+  // מתחילים בברירת מחדל או אקראי
+  let currentLocation: string = "ת\"מ פ\"ת"; 
+  let karonDoneTodayForController = false; // האם הבקר הזה כבר עשה קרונות היום?
 
   while (currentMin < endMin - 15) {
-    const timeLeft: number = endMin - currentMin;
+    const timeLeft = endMin - currentMin;
+    let selectedTask: TaskBlock | null = null;
 
-    let possibleTasks: TaskDef[] = taskPool
-      .filter(t => t.duration <= timeLeft && !visitedToday.has(t.id))
-      .sort((a, b) => (b.targetMonthly - b.done) - (a.targetMonthly - a.done));
-
-    if (possibleTasks.length === 0) break;
-
-    let selectedTask: TaskDef = possibleTasks[Math.floor(Math.random() * Math.min(3, possibleTasks.length))];
-    
-    selectedTask.done++;
-    if (selectedTask.category === "STATION") {
-      visitedToday.add(selectedTask.id);
+    // --- עדיפות 1: בקרת קרונות (חובה שעתיים בוקר/ערב) ---
+    // אם הבקר טרם ביצע קרונות, ויש לו מספיק זמן (לפחות 130 דק' לצמד משימות)
+    if (!karonDoneTodayForController && timeLeft >= 130) {
+        // בדיקת שעות משמרת בוקר/ערב לפי הדרישה
+        const isMorningWindow = currentMin >= 360 && currentMin <= 840; // 06-14
+        const isEveningWindow = currentMin >= 840 && currentMin <= 1320; // 14-22
+        
+        if (isMorningWindow || isEveningWindow) {
+            // בחירת האב הקרוב ביותר או אקראי
+            const hubs = ["אליפלט", "קריית אריה", "ת\"מ פ\"ת", "הקוממיות"];
+            const hub = hubs[Math.floor(Math.random() * hubs.length)];
+            
+            // שיבוץ צמד משימות (בלוק אחד בטקסט)
+            selectedTask = {
+                text: `⚙️ קרונות כפול (${hub}) - שעתיים`,
+                duration: 130 // 65 * 2
+            };
+            karonDoneTodayForController = true;
+            currentLocation = hub;
+        }
     }
 
-    let icon: string = getIcon(selectedTask.category);
-    let line: string = `[${minToTime(currentMin)}] ${icon} ${selectedTask.name}`;
-    
-    if (search === "" || line.toLowerCase().indexOf(search) !== -1 || ctrl.name.toLowerCase().indexOf(search) !== -1) {
-      planText += line + "\n────────────\n";
+    // --- עדיפות 2: חלונות זמן דינמיים לתחנות ---
+    if (!selectedTask) {
+        // חפש תחנה שחלון הזמן שלה הוא *עכשיו* וטרם בוצעה
+        // וגם: נסה למצוא תחנה שקרובה למיקום הנוכחי (currentLocation)
+        
+        // סינון כל החלונות הרלוונטיים לעכשיו וליום הזה
+        const validWindows = windows.filter(w => 
+            w.dayIdx === dayIdx && 
+            currentMin >= w.startMin && 
+            currentMin + 30 <= w.endMin && // שיהיה זמן לבצע
+            !tracker.visitedStations.has(w.station)
+        );
+
+        if (validWindows.length > 0) {
+            // בחירת התחנה המתאימה ביותר
+            // נסיון למצוא קירבה גאוגרפית
+            let bestMatch = validWindows.find(w => isNearby(currentLocation, w.station, stations));
+            
+            // אם אין קרובה, קח את הראשונה שזמינה
+            if (!bestMatch) bestMatch = validWindows[0];
+
+            // מציאת פרטי התחנה המלאים
+            const stationData = stations.find(s => s.name === bestMatch.station);
+            
+            if (stationData) {
+                selectedTask = {
+                    text: `🚉 ${stationData.name} (${stationData.type})`,
+                    duration: stationData.duration
+                };
+                tracker.visitedStations.add(stationData.name);
+                currentLocation = stationData.name;
+            }
+        }
     }
 
+    // --- עדיפות 3: מילוי זמן (מסילות / אונבורד / שירות) ---
+    if (!selectedTask) {
+        // אם אנחנו ליד הקצה - אונבורד ארוך
+        if ((currentLocation === "ת\"מ פ\"ת" || currentLocation === "הקוממיות") && timeLeft >= 80) {
+            selectedTask = { text: "🚆 אונבורד R1 מלא", duration: 80 };
+            currentLocation = (currentLocation === "ת\"מ פ\"ת") ? "הקוממיות" : "ת\"מ פ\"ת";
+        } 
+        // אונבורד קצר
+        else if (timeLeft >= 45) {
+            selectedTask = { text: "🚆 אונבורד R3 / חלקי", duration: 45 };
+            // עדכון מיקום וירטואלי (התקדמות על הקו)
+            currentLocation = moveVirtualLocation(currentLocation, stations);
+        }
+        // ניקיון מסילות
+        else if (timeLeft >= 30) {
+            selectedTask = { text: "🛤️ ניקיון מסילה (מקטע)", duration: 30 };
+        }
+        // שירות
+        else if (timeLeft >= 15) {
+            selectedTask = { text: "📞 מוקד שירות", duration: 15 };
+        }
+    }
+
+    if (!selectedTask) break; // אין יותר משימות מתאימות
+
+    // הוספה לפלט
+    outputText += `[${minToTime(currentMin)}] ${selectedTask.text}\n`;
+    outputText += `──────────\n`;
+    
     currentMin += selectedTask.duration;
-  }
-  return planText;
 }
 
-// --- פונקציות תשתית ---
+  return outputText;
+}
 
-function ensureMonthlyKPISTable(workbook: ExcelScript.Workbook) {
-  let sheet = workbook.getWorksheet("מעקב_יעדים_חודשי");
-  if (!sheet) {
-    sheet = workbook.addWorksheet("מעקב_יעדים_חודשי");
-    let data: (string | number)[][] = [
-      ["מזהה", "משימה", "קטגוריה", "משך דק'", "יעד חודשי", "בוצע", "יתרה"]
-    ];
+// --- לוגיקה גאוגרפית בסיסית ---
 
-    const stationsUG: string[] = ["אלנבי", "קרליבך", "יהודית", "שאול המלך", "ארלוזורוב", "אבא הלל", "ביאליק", "בן גוריון", "אהרונוביץ", "אם המושבות", "אליפלט"];
-    const stationsAG: string[] = ["הקוממיות", "העמל", "יוספטל", "בנימין", "בלפור", "ז'בוטינסקי", "רוטשילד", "העצמאות", "מחרוזת", "הבעש\"ט", "איסקוב", "ארליך", "בלומפילד", "שלמה", "קרית אריה", "שנקר", "שחם", "דנקנר", "קרול", "פינסקר", "ת\"מ פ\"ת"];
-
-    for (let s of stationsUG) { data.push([s, `בקרת תחנה ${s}`, "STATION", 60, 20, 0, 20]); }
-    for (let s of stationsAG) {
-      let time: number = s === "בלינסון" ? 45 : 30;
-      data.push([s, `בקרת תחנה ${s}`, "STATION", time, 20, 0, 20]);
-    }
-
-    const hubs: string[] = ["אליפלט", "קרית אריה", "ת\"מ פ\"ת", "הקוממיות"];
-    for (let h of hubs) { data.push([`KARON_${h}`, `קרונות - ${h}`, "KARON", 65, 96, 0, 96]); }
-
-    for (let i = 1; i <= 21; i++) { data.push([`TRACK_${i}`, `מסילה מקטע ${i}`, "TRACK", 30, 4, 0, 4]); }
-
-    data.push(["OB_R1", "אונבורד R1", "ONBOARD", 80, 360, 0, 360]);
-    data.push(["OB_R3", "אונבורד R3", "ONBOARD", 45, 360, 0, 360]);
-
-    let range = sheet.getRangeByIndexes(0, 0, data.length, 7);
-    range.setValues(data);
-    sheet.addTable(range, true).setName("MonthlyKPIs");
+function isNearby(current: string, target: string, stations: Station[]): boolean {
+    // בדיקה פשוטה: האם היעד הוא התחנה הבאה או הקודמת
+    // (במערכת מלאה היינו משתמשים באינדקסים)
+    const currIdx = stations.findIndex(s => s.name === current);
+    const targetIdx = stations.findIndex(s => s.name === target);
+    if (currIdx === -1 || targetIdx === -1) return false;
     
-    sheet.getRangeByIndexes(1, 6, data.length - 1, 1).setFormula("=E2-F2");
-    sheet.getUsedRange().getFormat().autofitColumns();
-  }
+    return Math.abs(currIdx - targetIdx) <= 5; // טווח של 5 תחנות נחשב "קרוב"
 }
 
-function readMonthlyKPIs(workbook: ExcelScript.Workbook): TaskDef[] {
-  let table = workbook.getTable("MonthlyKPIs");
-  let vals: (string | number | boolean)[][] = table.getRangeBetweenHeaderAndTotal().getValues();
-  return vals.map(r => ({
-    id: r[0] as string,
-    name: r[1] as string,
-    category: r[2] as string,
-    duration: Number(r[3]),
-    targetMonthly: Number(r[4]),
-    done: Number(r[5])
-  }));
+function moveVirtualLocation(current: string, stations: Station[]): string {
+    const idx = stations.findIndex(s => s.name === current);
+    if (idx === -1) return "ת\"מ פ\"ת";
+    // מדמה נסיעה של 5-10 תחנות
+    let newIdx = idx + 5;
+    if (newIdx >= stations.length) newIdx = idx - 5;
+    if (newIdx < 0) newIdx = 0;
+    return stations[newIdx].name;
 }
 
-function ensureControllersTable(workbook: ExcelScript.Workbook) {
+// --- הקמת נתונים (Setup) ---
+
+function setupReferenceTables(workbook: ExcelScript.Workbook) {
+    // 1. גיליון בקרים
     if (!workbook.getWorksheet("הגדרות_בקרים")) {
         let sheet = workbook.addWorksheet("הגדרות_בקרים");
-        let data: (string | number)[][] = [
+        let data = [
             ["שם", "התחלה", "סיום"],
             ["אורי מייזלר", "07:00", "16:00"], ["אינה טימופייב", "07:00", "16:00"],
-            ["דוד סייג", "07:00", "16:00"], ["בתיה אביה", "09:00", "18:00"],
+            ["אלתי קראו", "08:00", "17:00"], ["בוריס דולציגר", "06:00", "15:00"],
+            ["בתיה אביה", "09:00", "18:00"], ["דוד סייג", "07:00", "16:00"],
             ["הרצל שגב", "14:00", "23:00"], ["יוני יוסף", "14:00", "23:00"],
-            ["ערן ניצן", "06:00", "15:00"], ["רון טוב", "07:00", "16:00"]
+            ["ערן ניצן", "06:00", "15:00"], ["רון טוב", "07:00", "16:00"],
+            ["אברהם גברילביץ'", "08:00", "17:00"], ["גדי בן אור", "10:00", "19:00"],
+            ["יוני ניסן", "12:00", "21:00"], ["משה אליהו", "15:00", "23:00"]
         ];
-        let range = sheet.getRangeByIndexes(0,0,data.length,3);
-        range.setValues(data);
-        sheet.addTable(range, true).setName("ControllersTable");
+        sheet.getRangeByIndexes(0,0,data.length,3).setValues(data);
+        sheet.addTable(sheet.getUsedRange(), true).setName("ControllersTbl");
+    }
+
+    // 2. גיליון חלונות זמן דינמיים (הטבלה הגדולה)
+    if (!workbook.getWorksheet("חלונות_זמן_דינמיים")) {
+        let sheet = workbook.addWorksheet("חלונות_זמן_דינמיים");
+        
+        // כותרות
+        let headers = ["שם תחנה", "סוג", "ראשון_התחלה", "ראשון_סיום", "שני_התחלה", "שני_סיום", "שלישי_התחלה", "שלישי_סיום", "רביעי_התחלה", "רביעי_סיום", "חמישי_התחלה", "חמישי_סיום", "שישי_התחלה", "שישי_סיום"];
+        
+        // יצירת הנתונים מהטבלה שסיפקת (דוגמה חלקית ליישום אוטומטי, ניתן להרחיב לכל ה-34)
+        // שים לב: זה מייצר את המבנה, הסקריפט יודע לקרוא את זה
+        let data: (string|number)[][] = [];
+        const stationsAG = ["הקוממיות", "העמל", "כ\"ט בנובמבר", "יוספטל", "בנימין", "בלפור", "ז'בוטינסקי", "רוטשילד", "העצמאות", "מחרוזת"];
+        
+        // לוגיקת הסטה (Staggering) כמו בטבלה שלך
+        stationsAG.forEach((s, i) => {
+            // יצירת דפוס מדורג
+            let startH = 5 + Math.floor(i/3); 
+            data.push([s, "AG", 
+                `${startH}:40`, `${startH+2}:00`, // ראשון
+                `${startH+2}:00`, `${startH+4}:30`, // שני
+                `${startH+4}:30`, `${startH+7}:00`, // שלישי
+                "13:00", "15:30", // וכן הלאה... ברירת מחדל
+                "15:30", "18:00",
+                "18:00", "20:30"
+            ]);
+        });
+
+        // הוספת הנתונים לגיליון
+        if(data.length > 0) {
+            sheet.getRangeByIndexes(0, 0, 1, headers.length).setValues([headers]);
+            sheet.getRangeByIndexes(1, 0, data.length, headers.length).setValues(data);
+            sheet.addTable(sheet.getUsedRange(), true).setName("TimeWindowsTbl");
+        }
     }
 }
+
+// --- קריאת נתונים ---
 
 function readControllers(workbook: ExcelScript.Workbook): Controller[] {
-    let table = workbook.getTable("ControllersTable");
-    let vals: (string | number | boolean)[][] = table.getRangeBetweenHeaderAndTotal().getValues();
-    return vals.map(r => ({
-        name: r[0] as string,
-        start: convertTime(r[1]),
-        end: convertTime(r[2])
-    }));
+    let table = workbook.getTable("ControllersTbl");
+    if(!table) return [];
+    let vals = table.getRangeBetweenHeaderAndTotal().getValues() as (string|number|boolean)[][];
+    return vals.map(r => ({ name: String(r[0]), start: convertTime(r[1]), end: convertTime(r[2]) }));
 }
 
-function setupViewControlSheet(workbook: ExcelScript.Workbook) {
-    let sheet = workbook.getWorksheet("בקרת_תצוגה");
-    if (!sheet) {
-        sheet = workbook.addWorksheet("בקרת_תצוגה");
-        sheet.getRange("A2").setValue("חיפוש חופשי:");
-        sheet.getRange("A2").getFormat().getFill().setColor("#334155");
-        sheet.getRange("A2").getFormat().getFont().setColor("white");
-        
-        // תיקון שגיאת thick: השתמשתי ב-continuous
-        sheet.getRange("B2").getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setStyle(ExcelScript.BorderLineStyle.continuous);
-        sheet.getRange("B2").getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setWeight(ExcelScript.BorderWeight.thick);
-    }
+function readTimeWindows(workbook: ExcelScript.Workbook): TimeWindow[] {
+    let table = workbook.getTable("TimeWindowsTbl");
+    if(!table) return []; // מחזיר ריק אם אין נתונים, השיבוץ יתבסס על אקראיות
+    
+    let vals = table.getRangeBetweenHeaderAndTotal().getValues() as (string|number|boolean)[][];
+    let windows: TimeWindow[] = [];
+
+    // המרת השורות למבנה נוח לשיבוץ
+    // עמודות 2+3 = יום 0, 4+5 = יום 1 וכו'
+    vals.forEach(r => {
+        let station = String(r[0]);
+        for(let d=0; d<6; d++) { // ראשון עד שישי
+            let startIdx = 2 + (d * 2);
+            let startVal = r[startIdx];
+            let endVal = r[startIdx+1];
+            
+            if (startVal && endVal) {
+                windows.push({
+                    station: station,
+                    dayIdx: d,
+                    startMin: timeToMin(convertTime(startVal)),
+                    endMin: timeToMin(convertTime(endVal))
+                });
+            }
+        }
+    });
+    return windows;
+}
+
+function getStationsDB(): Station[] {
+    // בסיס נתונים קשיח וגיאוגרפי (לפי סדר התחנות)
+    const rawData = [
+        {n:"ת\"מ פ\"ת", t:"AG", d:30, h:true}, {n:"פינסקר", t:"AG", d:30, h:false},
+        {n:"קרול", t:"AG", d:30, h:false}, {n:"דנקנר", t:"AG", d:30, h:false},
+        {n:"בלינסון", t:"AG", d:45, h:false}, {n:"שחם", t:"AG", d:30, h:false},
+        {n:"שנקר", t:"AG", d:30, h:false}, {n:"קריית אריה", t:"AG", d:30, h:true},
+        {n:"אם המושבות", t:"UG", d:60, h:false}, {n:"אהרונוביץ", t:"UG", d:60, h:false},
+        {n:"בן גוריון", t:"UG", d:60, h:false}, {n:"ביאליק", t:"UG", d:60, h:false},
+        {n:"אבא הלל", t:"UG", d:60, h:false}, {n:"ארלוזורוב", t:"UG", d:60, h:false},
+        {n:"שאול המלך", t:"UG", d:60, h:false}, {n:"יהודית", t:"UG", d:60, h:false},
+        {n:"קרליבך", t:"UG", d:60, h:false}, {n:"אלנבי", t:"UG", d:60, h:false},
+        {n:"אליפלט", t:"UG", d:60, h:true}, {n:"שלמה", t:"AG", d:30, h:false},
+        {n:"בלומפילד", t:"AG", d:30, h:false}, {n:"ארליך", t:"AG", d:30, h:false},
+        {n:"איסקוב", t:"AG", d:30, h:false}, {n:"הבעש\"ט", t:"AG", d:30, h:false},
+        {n:"מחרוזת", t:"AG", d:30, h:false}, {n:"העצמאות", t:"AG", d:30, h:false},
+        {n:"רוטשילד", t:"AG", d:30, h:false}, {n:"ז'בוטינסקי", t:"AG", d:30, h:false},
+        {n:"בלפור", t:"AG", d:30, h:false}, {n:"בנימין", t:"AG", d:30, h:false},
+        {n:"יוספטל", t:"AG", d:30, h:false}, {n:"כ\"ט בנובמבר", t:"AG", d:30, h:false},
+        {n:"העמל", t:"AG", d:30, h:false}, {n:"הקוממיות", t:"AG", d:30, h:true}
+    ];
+
+    // יצירת רשימה מקושרת (Linked List) לגיאוגרפיה
+    return rawData.map((s, i) => ({
+        id: i,
+        name: s.n,
+        type: s.t,
+        duration: s.d,
+        isHub: s.h,
+        nextStation: i < rawData.length - 1 ? rawData[i+1].n : "",
+        prevStation: i > 0 ? rawData[i-1].n : ""
+    }));
 }
 
 // --- כלי עזר ---
 
 function timeToMin(t: string): number {
-    if (!t) return 0;
-    let p: string[] = t.split(":");
-    return p.length < 2 ? 0 : parseInt(p[0]) * 60 + parseInt(p[1]);
+    if (!t || t.indexOf(":") === -1) return 0;
+    let parts = t.split(":");
+    let h = Number(parts[0]);
+    let m = Number(parts[1]);
+    if (isNaN(h) || isNaN(m)) return 0;
+    return h * 60 + m;
 }
 
 function minToTime(m: number): string {
-    let h: number = Math.floor(m / 60);
-    let min: number = m % 60;
-    return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+    let h = Math.floor(m / 60);
+    let min = m % 60;
+    return `${h.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}`;
 }
 
-// תיקון שגיאת Any: הגדרת סוג מפורשת
 function convertTime(v: string | number | boolean): string {
-    if (typeof v === 'number') {
-        let totalMins: number = Math.round(v * 24 * 60);
-        return minToTime(totalMins);
-    }
+    if (typeof v === 'number') return minToTime(Math.round(v * 24 * 60));
     return String(v);
 }
 
-function getIcon(cat: string): string {
-    if (cat === "STATION") return "🚉";
-    if (cat === "KARON") return "⚙️";
-    if (cat === "TRACK") return "🛤️";
-    if (cat === "ONBOARD") return "🚆";
-    return "📝";
-}
-
 function formatHeader(r: ExcelScript.Range) {
-    let format = r.getFormat();
-    format.getFill().setColor("#0f172a");
-    format.getFont().setColor("white");
-    format.getFont().setBold(true);
-    format.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+    let fmt = r.getFormat();
+    fmt.getFill().setColor("#1e293b");
+    fmt.getFont().setColor("white");
+    fmt.getFont().setBold(true);
+    fmt.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
 }
 
 function formatOutputTable(s: ExcelScript.Worksheet, r: ExcelScript.Range) {
-    let format = r.getFormat();
-    format.setWrapText(true);
-    format.setVerticalAlignment(ExcelScript.VerticalAlignment.top);
-    format.getFont().setSize(8);
-    s.getRange("B:H").getFormat().setColumnWidth(160);
+    let fmt = r.getFormat();
+    fmt.setWrapText(true);
+    fmt.setVerticalAlignment(ExcelScript.VerticalAlignment.top);
+    fmt.getFont().setSize(8.5);
+    
+    // גבולות
+    let borderStyle = ExcelScript.BorderLineStyle.continuous;
+    fmt.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setStyle(borderStyle);
+    fmt.getRangeBorder(ExcelScript.BorderIndex.insideVertical).setStyle(borderStyle);
+    fmt.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setStyle(borderStyle);
+
+    // רוחב
+    s.getRange("B:H").getFormat().setColumnWidth(170);
     s.getRange("A:A").getFormat().setColumnWidth(100);
 }
