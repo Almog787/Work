@@ -1,7 +1,9 @@
 /**
- * RedLine OS V18.0 - Master Strategic Scheduler
- * ניהול תאריכים, סנכרון חודשי מבוסס החלטה, ואכיפת יעדים מלאה.
+ * RedLine OS V19.0 - Master Strategic Scheduler (Strict Type Fixed)
+ * פתרון שגיאות ה-Inference וה-Explicit Any.
  */
+
+// --- הגדרת מבני הנתונים (Interfaces) ---
 
 interface Station {
   name: string;
@@ -27,38 +29,46 @@ function main(workbook: ExcelScript.Workbook) {
   setupInfrastructure(workbook);
 
   // 2. קריאת הגדרות מלוח הבקרה
-  const dashSheet = workbook.getWorksheet("לוח_בקרה");
-  const startDateValue = dashSheet.getRange("B2").getValue();
-  const shouldSync = dashSheet.getRange("B3").getValue() === "כן";
+  const dashSheet: ExcelScript.Worksheet = workbook.getWorksheet("לוח_בקרה");
+  const startDateValue: number = dashSheet.getRange("B2").getValue() as number;
+  const shouldSync: boolean = dashSheet.getRange("B3").getValue() === "כן";
   
   if (!startDateValue) {
     console.log("נא להזין תאריך תחילת שבוע בתא B2 בגיליון לוח_בקרה");
     return;
   }
 
-  const startDate = new Date(Math.round((Number(startDateValue) - 25569) * 86400 * 1000));
+  // המרת תאריך אקסל לתאריך JavaScript
+  const startDate: Date = new Date(Math.round((startDateValue - 25569) * 86400 * 1000));
   
-  // 3. קריאת המצב החודשי (הזיכרון)
-  let kpiTable = workbook.getTable("Monthly_KPIs_Table");
-  let kpiValues = kpiTable.getRangeBetweenHeaderAndTotal().getValues() as (string | number)[][];
-  let kpiMap: Map<string, MonthlyKPI> = new Map();
-  kpiValues.forEach(row => {
-    kpiMap.set(row[0] as string, { id: row[0] as string, target: Number(row[2]), done: Number(row[3]) });
+  // 3. קריאת המצב החודשי מהטבלה
+  const kpiTable: ExcelScript.Table = workbook.getTable("Monthly_KPIs_Table");
+  const kpiValues: (string | number | boolean)[][] = kpiTable.getRangeBetweenHeaderAndTotal().getValues();
+  const kpiMap: Map<string, MonthlyKPI> = new Map();
+  
+  kpiValues.forEach((row: (string | number | boolean)[]) => {
+    kpiMap.set(row[0] as string, { 
+      id: row[0] as string, 
+      target: Number(row[2]), 
+      done: Number(row[3]) 
+    });
   });
 
-  // 4. נתוני עזר
-  const controllers = readControllers(workbook);
-  const stationsDB = getFullStationsDB();
+  // 4. קריאת נתוני בקרים ורשימת תחנות
+  const controllers: Controller[] = readControllers(workbook);
+  const stationsDB: Station[] = getFullStationsDB();
 
   // 5. הכנת גיליון הסידור השבועי
-  let scheduleSheet = workbook.getWorksheet("סידור_שבועי");
+  let scheduleSheet: ExcelScript.Worksheet = workbook.getWorksheet("סידור_שבועי");
   if (!scheduleSheet) scheduleSheet = workbook.addWorksheet("סידור_שבועי");
-  scheduleSheet.getUsedRange()?.clear();
+  
+  const usedRange: ExcelScript.Range = scheduleSheet.getUsedRange();
+  if (usedRange) usedRange.clear();
 
-  // יצירת כותרות עם תאריכים אמיתיים
+  // יצירת כותרות עם תאריכים
   let dateHeaders: string[] = ["בקר"];
   for (let i = 0; i < 7; i++) {
-    let d = new Date(startDate);
+    let d: Date = new Date(startDate);
     d.setDate(d.getDate() + i);
     dateHeaders.push(`${getDayName(i)} (${d.getDate()}/${d.getMonth() + 1})`);
   }
@@ -66,29 +76,29 @@ function main(workbook: ExcelScript.Workbook) {
   formatHeader(scheduleSheet.getRange("A1:H1"));
 
   // 6. מנוע שיבוץ אסטרטגי
-  let matrix: string[][] = [];
+  let scheduleMatrix: string[][] = [];
   let currentSessionAssignments: Map<string, number> = new Map(); // מה שובץ בהרצה הזו
 
   for (let ctrl of controllers) {
     let row: string[] = [ctrl.name];
-    for (let day = 0; day < 7; day++) {
-      let dailyPlan = generateStrategicDay(ctrl, day, stationsDB, kpiMap, currentSessionAssignments);
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+      let dailyPlan: string = generateStrategicDay(ctrl, dayIdx, stationsDB, kpiMap, currentSessionAssignments);
       row.push(dailyPlan);
     }
-    matrix.push(row);
+    scheduleMatrix.push(row);
   }
 
-  // 7. כתיבת התוצאות
-  if (matrix.length > 0) {
-    let range = scheduleSheet.getRangeByIndexes(1, 0, matrix.length, 8);
-    range.setValues(matrix);
-    formatOutputTable(scheduleSheet, range);
+  // 7. כתיבת התוצאות לגיליון
+  if (scheduleMatrix.length > 0) {
+    const dataRange: ExcelScript.Range = scheduleSheet.getRangeByIndexes(1, 0, scheduleMatrix.length, 8);
+    dataRange.setValues(scheduleMatrix);
+    formatOutputTable(scheduleSheet, dataRange);
   }
 
   // 8. סנכרון חודשי (רק אם המשתמש אישר בלוח הבקרה)
   if (shouldSync) {
-    let updatedKPIs = kpiValues.map(row => {
-      let id = row[0] as string;
+    const updatedKPIs: (string | number | boolean)[][] = kpiValues.map((row: (string | number | boolean)[]) => {
+      let id: string = row[0] as string;
       if (currentSessionAssignments.has(id)) {
         row[3] = Number(row[3]) + currentSessionAssignments.get(id)!;
       }
@@ -104,37 +114,41 @@ function main(workbook: ExcelScript.Workbook) {
 }
 
 /**
- * מנוע שיבוץ מבוסס עדיפות חודשית
+ * מנוע שיבוץ מבוסס עדיפות לפי יתרה ב-KPI
  */
 function generateStrategicDay(ctrl: Controller, dayIdx: number, stations: Station[], kpiMap: Map<string, MonthlyKPI>, sessionTracker: Map<string, number>): string {
-  let startMin = timeToMin(ctrl.start);
-  let endMin = timeToMin(ctrl.end);
+  let startMin: number = timeToMin(ctrl.start);
+  let endMin: number = timeToMin(ctrl.end);
+  
+  // חוקי סופ"ש
   if (dayIdx === 5) { startMin = timeToMin("06:00"); endMin = timeToMin("14:30"); }
   if (dayIdx === 6) { startMin = timeToMin("19:00"); endMin = timeToMin("24:00"); }
 
-  let currentMin = startMin;
-  let planText = "";
-  let visitedToday = new Set<string>();
+  let currentMin: number = startMin;
+  let planText: string = "";
+  let visitedToday: Set<string> = new Set<string>();
 
   while (currentMin < endMin - 20) {
-    let timeLeft = endMin - currentMin;
+    let timeLeft: number = endMin - currentMin;
     
     // מציאת המשימה עם הפיגור הגדול ביותר ביעדים
-    let bestTask = stations
-      .filter(s => s.duration <= timeLeft && !visitedToday.has(s.name))
-      .sort((a, b) => {
-        let remA = (kpiMap.get(a.name)?.target || 0) - (kpiMap.get(a.name)?.done || 0);
-        let remB = (kpiMap.get(b.name)?.target || 0) - (kpiMap.get(b.name)?.done || 0);
+    let possibleStations: Station[] = stations.filter(s => s.duration <= timeLeft && !visitedToday.has(s.name));
+    
+    // מיון לפי יתרה חסרה (Target - Done)
+    possibleStations.sort((a, b) => {
+        let remA: number = (kpiMap.get(a.name)?.target || 0) - (kpiMap.get(a.name)?.done || 0);
+        let remB: number = (kpiMap.get(b.name)?.target || 0) - (kpiMap.get(b.name)?.done || 0);
         return remB - remA;
-      })[0];
+    });
+
+    let bestTask: Station | undefined = possibleStations[0];
 
     if (bestTask) {
       planText += `[${minToTime(currentMin)}] ${bestTask.name}\n────────────\n`;
       visitedToday.add(bestTask.name);
       
-      // עדכון מונה לסנכרון בסוף
+      // רישום לצורך סנכרון סופי
       sessionTracker.set(bestTask.name, (sessionTracker.get(bestTask.name) || 0) + 1);
-      
       currentMin += bestTask.duration;
     } else {
       planText += `[${minToTime(currentMin)}] אונבורד / נסיעה\n────────────\n`;
@@ -144,40 +158,60 @@ function generateStrategicDay(ctrl: Controller, dayIdx: number, stations: Statio
   return planText;
 }
 
-// --- פונקציות תשתית ---
+// --- פונקציות תשתית וקריאת טבלאות ---
+
+function readControllers(workbook: ExcelScript.Workbook): Controller[] {
+  const table: ExcelScript.Table = workbook.getTable("ControllersTbl");
+  if (!table) return [];
+  
+  const values: (string | number | boolean)[][] = table.getRangeBetweenHeaderAndTotal().getValues();
+  return values.map((row: (string | number | boolean)[]) => ({
+    name: String(row[0]),
+    start: convertExcelTimeFormat(row[1]),
+    end: convertExcelTimeFormat(row[2])
+  }));
+}
 
 function setupInfrastructure(workbook: ExcelScript.Workbook) {
-  // לוח בקרה
-  let dash = workbook.getWorksheet("לוח_בקרה");
+  // 1. לוח בקרה
+  let dash: ExcelScript.Worksheet = workbook.getWorksheet("לוח_בקרה");
   if (!dash) {
     dash = workbook.addWorksheet("לוח_בקרה");
     dash.getRange("A2:A3").setValues([["תאריך תחילת שבוע (יום א'):"], ["סנכרון ליעדים חודשיים?"]]);
     dash.getRange("B3").getDataValidation().setRule({ list: { inCellDropDown: true, source: "כן,לא" } });
-    dash.getRange("B2").setValue(46050); // תאריך דוגמה
+    dash.getRange("B2").setValue(46050); // 02/02/2026 כברירת מחדל
     dash.getRange("B3").setValue("לא");
     dash.getRange("A2:A3").getFormat().getFont().setBold(true);
     dash.getUsedRange().getFormat().autofitColumns();
   }
 
-  // טבלת יעדים
+  // 2. טבלת יעדים
   if (!workbook.getWorksheet("מעקב_יעדים_חודשי")) {
-    let sheet = workbook.addWorksheet("מעקב_יעדים_חודשי");
+    const sheet: ExcelScript.Worksheet = workbook.addWorksheet("מעקב_יעדים_חודשי");
     let data: (string | number)[][] = [["משימה", "סוג", "יעד", "בוצע", "יתרה"]];
-    getFullStationsDB().forEach(s => data.push([s.name, s.type, 20, 0, 20]));
+    getFullStationsDB().forEach((s: Station) => data.push([s.name, s.type, 20, 0, 20]));
     sheet.getRangeByIndexes(0, 0, data.length, 5).setValues(data);
-    let table = sheet.addTable(sheet.getUsedRange(), true);
-    table.setName("Monthly_KPIs_Table");
-    sheet.getRange("E2:E100").setFormula("=C2-D2");
+    sheet.addTable(sheet.getRangeByIndexes(0, 0, data.length, 5), true).setName("Monthly_KPIs_Table");
+    sheet.getRangeByIndexes(1, 4, data.length - 1, 1).setFormula("=C2-D2");
+    sheet.getUsedRange().getFormat().autofitColumns();
   }
 
-  // הגדרות בקרים
+  // 3. הגדרות בקרים
   if (!workbook.getWorksheet("הגדרות_בקרים")) {
-    let sheet = workbook.addWorksheet("הגדרות_בקרים");
-    let data = [["שם", "התחלה", "סיום"], ["אורי מייזלר", "07:00", "16:00"], ["אינה טימופייב", "07:00", "16:00"], ["דוד סייג", "07:00", "16:00"], ["בתיה אביה", "09:00", "18:00"], ["הרצל שגב", "14:00", "23:00"]];
+    const sheet: ExcelScript.Worksheet = workbook.addWorksheet("הגדרות_בקרים");
+    let data: (string | number)[][] = [
+      ["שם", "התחלה", "סיום"],
+      ["אורי מייזלר", "07:00", "16:00"],
+      ["אינה טימופייב", "07:00", "16:00"],
+      ["בתיה אביה", "09:00", "18:00"],
+      ["הרצל שגב", "14:00", "23:00"]
+    ];
     sheet.getRangeByIndexes(0, 0, data.length, 3).setValues(data);
-    sheet.addTable(sheet.getUsedRange(), true).setName("ControllersTbl");
+    sheet.addTable(sheet.getRangeByIndexes(0, 0, data.length, 3), true).setName("ControllersTbl");
   }
 }
+
+// --- נתונים ופונקציות עזר ---
 
 function getFullStationsDB(): Station[] {
   return [
@@ -189,18 +223,44 @@ function getFullStationsDB(): Station[] {
     { name: "קוממיות", type: "AG", duration: 30, isHub: true },
     { name: "אליפלט", type: "AG", duration: 60, isHub: true },
     { name: "ת\"מ פ\"ת", type: "AG", duration: 30, isHub: true }
-  ]; // ניתן להוסיף את שאר ה-34 באותו אופן
+  ];
 }
 
-function readControllers(workbook: ExcelScript.Workbook): Controller[] {
-  let vals = workbook.getTable("ControllersTbl").getRangeBetweenHeaderAndTotal().getValues();
-  return vals.map(r => ({ name: String(r[0]), start: convertTime(r[1]), end: convertTime(r[2]) }));
+function timeToMin(t: string): number {
+    if (!t || t.indexOf(":") === -1) return 0;
+    let parts: string[] = t.split(":");
+    return Number(parts[0]) * 60 + Number(parts[1]);
 }
 
-// --- כלי עזר ---
-function timeToMin(t: string): number { let p = t.split(":"); return Number(p[0]) * 60 + Number(p[1]); }
-function minToTime(m: number): string { return `${Math.floor(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}`; }
-function convertTime(v: any): string { if (typeof v === 'number') return minToTime(Math.round(v * 24 * 60)); return String(v); }
-function getDayName(i: number): string { return ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"][i]; }
-function formatHeader(r: ExcelScript.Range) { r.getFormat().getFill().setColor("#0f172a"); r.getFormat().getFont().setColor("white"); r.getFormat().getFont().setBold(true); r.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center); }
-function formatOutputTable(s: ExcelScript.Worksheet, r: ExcelScript.Range) { r.getFormat().setWrapText(true); r.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.top); r.getFormat().getFont().setSize(8); s.getRange("B:H").getFormat().setColumnWidth(160); s.getRange("A:A").getFormat().setColumnWidth(100); }
+function minToTime(m: number): string {
+    return `${Math.floor(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}`;
+}
+
+function convertExcelTimeFormat(v: string | number | boolean): string {
+    if (typeof v === 'number') {
+        let totalMins: number = Math.round(v * 24 * 60);
+        return minToTime(totalMins);
+    }
+    return String(v);
+}
+
+function getDayName(i: number): string {
+  return ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"][i];
+}
+
+function formatHeader(r: ExcelScript.Range) {
+    let fmt: ExcelScript.RangeFormat = r.getFormat();
+    fmt.getFill().setColor("#0f172a");
+    fmt.getFont().setColor("white");
+    fmt.getFont().setBold(true);
+    fmt.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+}
+
+function formatOutputTable(s: ExcelScript.Worksheet, r: ExcelScript.Range) {
+    let fmt: ExcelScript.RangeFormat = r.getFormat();
+    fmt.setWrapText(true);
+    fmt.setVerticalAlignment(ExcelScript.VerticalAlignment.top);
+    fmt.getFont().setSize(8);
+    s.getRange("B:H").getFormat().setColumnWidth(160);
+    s.getRange("A:A").getFormat().setColumnWidth(100);
+}
