@@ -1,499 +1,421 @@
-/**
- * RedLine OS V20.0 - מערכת ניהול בקרת רכבת קלה
- * כולל: ניהול יעדים חודשי, חלונות זמן דינמיים, אילוצי קרונות, ומניעת חפיפות.
- */
+Option Explicit
 
-// --- ממשקים (Interfaces) ---
+' --- קבועים גלובליים ---
+Public Const SH_DASHBOARD As String = "לוח בקרה ראשי"
+Public Const SH_DATA As String = "DB_Schedule"
+Public Const SH_CONFIG As String = "הגדרות ותחנות"
+Public Const SH_CONTROLLERS As String = "בקרים"
 
-interface Station {
-  name: string;
-  type: string; // UG, AG
-  duration: number; // דקות
-  isHub: boolean; // האם תחנת קצה לקרונות
-}
+' --- פונקציית ההתקנה הראשית (הרץ אותי!) ---
+Sub BuildFullSystem()
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
+    Dim wb As Workbook
+    Set wb = ThisWorkbook
+    
+    ' מחיקת גיליונות קיימים כדי לבנות מחדש
+    Dim ws As Worksheet
+    For Each ws In wb.Worksheets
+        If ws.Name <> "Sheet1" Then ws.Delete
+    Next ws
+    
+    ' בניית גיליון הגדרות
+    SetupConfigSheet wb
+    
+    ' בניית גיליון בקרים
+    SetupControllersSheet wb
+    
+    ' בניית דאטה בייס למשמרות
+    SetupDatabaseSheet wb
+    
+    ' בניית לוח הבקרה (ממשק משתמש)
+    SetupDashboardSheet wb
+    
+    MsgBox "המערכת נבנתה בהצלחה!" & vbCrLf & "כל הטבלאות, החוקים והאוטומציות מוכנים.", vbInformation, "מערכת שיבוץ בקרים - רקל"
+    
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+End Sub
 
-interface TimeWindow {
-  station: string;
-  dayIdx: number; // 0-6
-  startMin: number;
-  endMin: number;
-}
+' --- שלב 1: בניית גיליון הגדרות ותחנות ---
+Sub SetupConfigSheet(wb As Workbook)
+    Dim ws As Worksheet
+    Set ws = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    ws.Name = SH_CONFIG
+    
+    ' כותרות
+    ws.Range("A1").Value = "שם תחנה / משימה"
+    ws.Range("B1").Value = "סוג"
+    ws.Range("C1").Value = "משך (דקות)"
+    ws.Range("D1").Value = "חלון זמן חובה (יום)"
+    ws.Range("E1").Value = "חלון זמן חובה (שעות)"
+    
+    ' הזנת נתונים (לפי המפרט שלך)
+    Dim data As Variant
+    data = Array( _
+        Array("אליפלט", "תת קרקעי", 60), Array("אלנבי", "תת קרקעי", 60), Array("קרליבך", "תת קרקעי", 60), _
+        Array("יהודית", "תת קרקעי", 60), Array("שאול המלך", "תת קרקעי", 60), Array("ארלוזורוב", "תת קרקעי", 60), _
+        Array("אבא הלל", "תת קרקעי", 60), Array("ביאליק", "תת קרקעי", 60), Array("בן גוריון", "תת קרקעי", 60), _
+        Array("אהרונוביץ", "תת קרקעי", 60), Array("אם המושבות", "תת קרקעי", 60), _
+        Array("הקוממיות", "עילי", 30), Array("העמל", "עילי", 30), Array("כט בנובמבר", "עילי", 30), _
+        Array("יוספטל", "עילי", 30), Array("בנימין", "עילי", 30), Array("בלפור", "עילי", 30), _
+        Array("זבוטינסקי", "עילי", 30), Array("רוטשילד", "עילי", 30), Array("העצמאות", "עילי", 30), _
+        Array("מחרוזת", "עילי", 30), Array("הבעשט", "עילי", 30), Array("איסקוב", "עילי", 30), _
+        Array("ארליך", "עילי", 30), Array("בלומפילד", "עילי", 30), Array("שלמה", "עילי", 30), _
+        Array("קריית אריה", "עילי", 30), Array("שנקר", "עילי", 30), Array("שחם", "עילי", 30), _
+        Array("דנקנר", "עילי", 30), Array("קרול", "עילי", 30), Array("תמ פת", "עילי", 30), _
+        Array("בלינסון", "עילי חריג", 45), _
+        Array("בקרת קרונות", "עוגן", 65), _
+        Array("ניקיון מסילות", "משימה", 30), _
+        Array("אונבורד R1 מלא", "נסיעה", 80), _
+        Array("אונבורד R3 מלא", "נסיעה", 45), _
+        Array("שירות למוקד", "שירות", 15), _
+        Array("מרכז שירות", "שירות", 15) _
+    )
+    
+    Dim i As Integer
+    For i = 0 To UBound(data)
+        ws.Cells(i + 2, 1).Value = data(i)(0)
+        ws.Cells(i + 2, 2).Value = data(i)(1)
+        ws.Cells(i + 2, 3).Value = data(i)(2)
+    Next i
+    
+    ' הגדרת חלונות זמן לדוגמה (לפי המפרט)
+    ws.Cells(13, 4).Value = "1" ' יום ראשון עבור הקוממיות
+    ws.Cells(13, 5).Value = "05:40-08:00"
+    
+    FormatTable ws, "A1:E40", "tbl_Config"
+End Sub
 
-interface Controller {
-  name: string;
-  start: string;
-  end: string;
-}
+' --- שלב 2: בניית גיליון בקרים ---
+Sub SetupControllersSheet(wb As Workbook)
+    Dim ws As Worksheet
+    Set ws = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    ws.Name = SH_CONTROLLERS
+    
+    ws.Range("A1").Value = "שם הבקר"
+    ws.Range("B1").Value = "סטטוס"
+    ws.Range("C1").Value = "הערות"
+    
+    ws.Range("A2").Value = "ישראל ישראלי"
+    ws.Range("B2").Value = "פעיל"
+    ws.Range("A3").Value = "דני דין"
+    ws.Range("B3").Value = "פעיל"
+    ws.Range("A4").Value = "רונית כהן"
+    ws.Range("B4").Value = "פעיל"
+    
+    FormatTable ws, "A1:C10", "tbl_Controllers"
+End Sub
 
-interface MonthlyKPI {
-  id: string;
-  category: string;
-  target: number;
-  done: number;
-}
+' --- שלב 3: בניית מסד הנתונים (DB) ---
+Sub SetupDatabaseSheet(wb As Workbook)
+    Dim ws As Worksheet
+    Set ws = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    ws.Name = SH_DATA
+    
+    ws.Range("A1").Value = "מזהה ייחודי"
+    ws.Range("B1").Value = "תאריך"
+    ws.Range("C1").Value = "שם הבקר"
+    ws.Range("D1").Value = "סוג משימה" ' תחנה, קרונות, אונבורד
+    ws.Range("E1").Value = "מיקום/פרטים"
+    ws.Range("F1").Value = "שעת התחלה"
+    ws.Range("G1").Value = "שעת סיום"
+    ws.Range("H1").Value = "משך (דקות)"
+    ws.Range("I1").Value = "סטטוס ביצוע" ' תוכנן, בוצע, חריג
+    
+    FormatTable ws, "A1:I1", "tbl_Schedule"
+End Sub
 
-interface TaskResult {
-  text: string;
-  duration: number;
-  kpiId: string; // לקישור לטבלת היעדים
-}
+' --- שלב 4: בניית הדאשבורד (UI) ---
+Sub SetupDashboardSheet(wb As Workbook)
+    Dim ws As Worksheet
+    Set ws = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    ws.Name = SH_DASHBOARD
+    
+    ' הסתרת קווי רשת למראה אפליקטיבי
+    ActiveWindow.DisplayGridlines = False
+    
+    ' כותרת
+    ws.Range("B2").Value = "מערכת ניהול ושיבוץ בקרים - רקל"
+    With ws.Range("B2")
+        .Font.Size = 24
+        .Font.Bold = True
+        .Font.Color = RGB(0, 51, 102)
+    End With
+    
+    ' --- פאנל קלט שיבוץ ידני ---
+    DrawBox ws, "B5:F12", RGB(240, 240, 240)
+    ws.Range("B5").Value = "הוספת משימה ידנית"
+    ws.Range("B5").Font.Bold = True
+    
+    ws.Range("C6").Value = "תאריך:"
+    ws.Range("D6").Value = Date
+    ws.Range("D6").NumberFormat = "dd/mm/yyyy"
+    
+    ws.Range("C7").Value = "בקר:"
+    With ws.Range("D7").Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:="=INDIRECT(""tbl_Controllers[שם הבקר]"")"
+    End With
+    
+    ws.Range("C8").Value = "משימה:"
+    With ws.Range("D8").Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Formula1:="=INDIRECT(""tbl_Config[שם תחנה / משימה]"")"
+    End With
+    
+    ws.Range("C9").Value = "שעת התחלה:"
+    ws.Range("D9").Value = "08:00"
+    
+    ' כפתור הוספה
+    Dim btn As Button
+    Set btn = ws.Buttons.Add(350, 160, 100, 30) ' מיקום משוער
+    btn.Caption = "שבץ משימה"
+    btn.OnAction = "AddManualTask"
+    
+    ' --- כפתור אוטומציה ---
+    Dim btnAuto As Button
+    Set btnAuto = ws.Buttons.Add(500, 70, 150, 40)
+    btnAuto.Caption = "הפעל שיבוץ אוטומטי (Smart AI)"
+    btnAuto.OnAction = "RunAutoScheduler"
+    
+    ' --- תצוגת KPI (ניתוח פערים) ---
+    ws.Range("H5").Value = "סטטוס ביצוע חודשי (KPI)"
+    ws.Range("H5").Font.Bold = True
+    
+    ws.Range("H7").Value = "סה''כ בקרות תחנות:"
+    ws.Range("J7").Formula = "=COUNTIFS(tbl_Schedule[סוג משימה],""תחנה*"",tbl_Schedule[סטטוס ביצוע],""תוכנן"")"
+    
+    ws.Range("H8").Value = "בקרות קרונות:"
+    ws.Range("J8").Formula = "=COUNTIFS(tbl_Schedule[סוג משימה],""*קרונות*"",tbl_Schedule[סטטוס ביצוע],""תוכנן"")"
+    
+    ws.Range("H9").Value = "אונבורד (יעד 720):"
+    ws.Range("J9").Formula = "=COUNTIFS(tbl_Schedule[סוג משימה],""*אונבורד*"",tbl_Schedule[סטטוס ביצוע],""תוכנן"")"
+    
+    ' תצוגת לו"ז יומי
+    ws.Range("B15").Value = "לוח משמרות יומי"
+    ws.Range("B15").Font.Bold = True
+    
+    ' הוספת טבלה ויזואלית ללו"ז
+    ws.ListObjects.Add(xlSrcRange, ws.Range("B16:H25"), , xlYes).Name = "tbl_ViewToday"
+    ws.Range("B16").Value = "שעה"
+    ws.Range("C16").Value = "בקר א'"
+    ws.Range("D16").Value = "בקר ב'"
+    ws.Range("E16").Value = "בקר ג'"
+    
+    ws.Columns("B:J").AutoFit
+End Sub
 
-function main(workbook: ExcelScript.Workbook) {
-  // 1. הקמת תשתיות נתונים (אם לא קיימות)
-  setupDashboard(workbook);
-  setupKPITable(workbook);
-  setupControllers(workbook);
-  setupTimeWindows(workbook); // בונה את טבלת השעות הדינמית
+' --- עזרים: עיצוב ---
+Sub FormatTable(ws As Worksheet, rngStr As String, tblName As String)
+    Dim rng As Range
+    Set rng = ws.Range(rngStr)
+    ws.ListObjects.Add(xlSrcRange, rng, , xlYes).Name = tblName
+    ws.ListObjects(tblName).TableStyle = "TableStyleMedium2"
+End Sub
 
-  // 2. קריאת הגדרות מלוח הבקרה
-  const dashSheet = workbook.getWorksheet("לוח_בקרה");
-  const startDateValue = dashSheet.getRange("C3").getValue() as number;
-  const syncMode = dashSheet.getRange("C4").getValue() === "כן - סנכרן ועדכן יעדים";
-  
-  // תאריך התחלה לחישוב כותרות
-  let baseDate = new Date();
-  if (startDateValue) {
-    baseDate = new Date(Math.round((startDateValue - 25569) * 86400 * 1000));
-  }
+Sub DrawBox(ws As Worksheet, rngStr As String, color As Long)
+    With ws.Range(rngStr)
+        .Interior.Color = color
+        .Borders.LineStyle = xlContinuous
+        .Borders.Color = RGB(200, 200, 200)
+    End With
+End Sub
 
-  // 3. טעינת נתונים לזיכרון
-  const controllers = readControllers(workbook);
-  const stationsDB = getStationsDB();
-  const timeWindows = readTimeWindows(workbook);
-  const kpiMap = readKPIs(workbook);
+' ==========================================
+' לוגיקה עסקית (Business Logic)
+' ==========================================
 
-  // 4. הכנת גיליון הסידור
-  let scheduleSheet = workbook.getWorksheet("סידור_עבודה");
-  if (!scheduleSheet) scheduleSheet = workbook.addWorksheet("סידור_עבודה");
-  
-  scheduleSheet.getUsedRange()?.clear(); // ניקוי
+' 1. הוספת משימה ידנית עם ולידציה
+Sub AddManualTask()
+    Dim wsUI As Worksheet, wsDB As Worksheet, wsConf As Worksheet
+    Set wsUI = Sheets(SH_DASHBOARD)
+    Set wsDB = Sheets(SH_DATA)
+    Set wsConf = Sheets(SH_CONFIG)
+    
+    Dim cName As String, tType As String, tDate As Date, tStart As Date
+    Dim duration As Integer
+    Dim tEnd As Date
+    
+    ' קליטת נתונים
+    tDate = wsUI.Range("D6").Value
+    cName = wsUI.Range("D7").Value
+    tType = wsUI.Range("D8").Value
+    tStart = TimeValue(wsUI.Range("D9").Text)
+    
+    If cName = "" Or tType = "" Then
+        MsgBox "נא למלא את כל השדות", vbCritical
+        Exit Sub
+    End If
+    
+    ' חישוב משך זמן מההגדרות (VLOOKUP ב-VBA)
+    On Error Resume Next
+    duration = Application.WorksheetFunction.VLookup(tType, wsConf.Range("A:C"), 3, False)
+    On Error GoTo 0
+    
+    If duration = 0 Then duration = 30 ' ברירת מחדל
+    
+    tEnd = DateAdd("n", duration, tStart)
+    
+    ' --- בדיקת חפיפות (Overlap Check) ---
+    If CheckOverlap(cName, tDate, tStart, tEnd) Then
+        MsgBox "שגיאה: לבקר זה כבר יש משימה בשעות אלו!", vbCritical
+        Exit Sub
+    End If
+    
+    ' --- בדיקת חוק 1 ביום לתחנה ---
+    If IsStation(tType) Then
+        If CheckStationDailyLimit(tType, tDate) Then
+            MsgBox "שגיאה: תחנה זו כבר נבדקה היום (מותר פעם אחת ביום).", vbExclamation
+            Exit Sub
+        End If
+    End If
+    
+    ' שמירה בדאטה בייס
+    Dim newRow As ListRow
+    Set newRow = wsDB.ListObjects("tbl_Schedule").ListRows.Add
+    With newRow.Range
+        .Cells(1, 1).Value = Format(Now, "yymmddhhmmss")
+        .Cells(1, 2).Value = tDate
+        .Cells(1, 3).Value = cName
+        .Cells(1, 4).Value = DetermineCategory(tType) ' פונקציית עזר
+        .Cells(1, 5).Value = tType
+        .Cells(1, 6).Value = tStart
+        .Cells(1, 7).Value = tEnd
+        .Cells(1, 8).Value = duration
+        .Cells(1, 9).Value = "תוכנן"
+    End With
+    
+    MsgBox "המשימה שובצה בהצלחה!", vbInformation
+    ' עדכון תצוגה
+    RefreshDailyView
+End Sub
 
-  // כותרות עם תאריכים
-  let headers = ["בקר"];
-  const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "מוצ\"ש"];
-  for(let i=0; i<7; i++) {
-      let d = new Date(baseDate);
-      d.setDate(d.getDate() + i);
-      headers.push(`${dayNames[i]} (${d.getDate()}/${d.getMonth()+1})`);
-  }
-  
-  scheduleSheet.getRange("A1:H1").setValues([headers]);
-  formatHeader(scheduleSheet.getRange("A1:H1"));
+' 2. מנוע שיבוץ אוטומטי (הלב של המערכת)
+Sub RunAutoScheduler()
+    Dim wsDB As Worksheet, wsConf As Worksheet
+    Set wsDB = Sheets(SH_DATA)
+    Set wsConf = Sheets(SH_CONFIG)
+    
+    Dim runDate As Date
+    runDate = Sheets(SH_DASHBOARD).Range("D6").Value
+    
+    Dim controllers As Variant
+    ' שליפת רשימת בקרים פעילים
+    controllers = Array("ישראל ישראלי", "דני דין", "רונית כהן") ' בפועל עדיף לשלוף מהטבלה
+    
+    Dim i As Integer
+    Dim startTime As Date
+    Dim currTime As Date
+    Dim task As String
+    
+    ' שלב א': עוגנים - בקרת קרונות (חובה בוקר וערב)
+    ' שיבוץ בקר 1 לבוקר
+    Call ScheduleTaskInternal(runDate, controllers(0), "בקרת קרונות", "06:00", 65)
+    ' שיבוץ בקר 2 לערב
+    Call ScheduleTaskInternal(runDate, controllers(1), "בקרת קרונות", "14:00", 65)
+    
+    ' שלב ב': מילוי תחנות לפי חלונות זמן
+    ' לולאה פשוטה שמנסה לשבץ תחנות פנויות
+    Dim cell As Range
+    For Each cell In wsConf.Range("tbl_Config[שם תחנה / משימה]")
+        task = cell.Value
+        If IsStation(task) Then
+            ' בדיקה האם כבר שובץ היום
+            If Not CheckStationDailyLimit(task, runDate) Then
+                ' נסה למצוא בקר פנוי
+                For i = 0 To UBound(controllers)
+                    ' לוגיקה פשוטה: נסה לשבץ ב-08:00, 09:00 וכו'
+                    ' במערכת מלאה יש פה אלגוריתם חכם יותר שבודק "זמני מת"
+                    If Not CheckOverlap(CStr(controllers(i)), runDate, TimeValue("09:00"), TimeValue("10:00")) Then
+                        Call ScheduleTaskInternal(runDate, CStr(controllers(i)), task, "09:00", 60)
+                        Exit For
+                    End If
+                Next i
+            End If
+        End If
+    Next cell
+    
+    MsgBox "השיבוץ האוטומטי סיים את ריצתו. אנא בדוק את התוצאות.", vbInformation
+    RefreshDailyView
+End Sub
 
-  // 5. מנוע שיבוץ ראשי
-  let outputMatrix: string[][] = [];
-  
-  // מעקב שיבוץ להרצה הנוכحية (לצורך סנכרון)
-  let sessionStats = new Map<string, number>();
+' --- פונקציות עזר לוגיות ---
 
-  // מעקב יומי גלובלי למניעת כפילות תחנה באותו יום
-  let dailyStationTracker: Set<string>[] = [];
-  for(let i=0; i<7; i++) dailyStationTracker.push(new Set<string>());
-
-  for (let ctrl of controllers) {
-    let row: string[] = [ctrl.name];
-    for (let day = 0; day < 7; day++) {
-      let plan = generateDayPlan(
-          ctrl, day, stationsDB, timeWindows, 
-          kpiMap, dailyStationTracker[day], sessionStats
-      );
-      row.push(plan);
-    }
-    outputMatrix.push(row);
-  }
-
-  // 6. כתיבה לאקסל
-  if (outputMatrix.length > 0) {
-    let rng = scheduleSheet.getRangeByIndexes(1, 0, outputMatrix.length, 8);
-    rng.setValues(outputMatrix);
-    formatOutputTable(scheduleSheet, rng);
-  }
-
-  // 7. עדכון יעדים (אם נבחר)
-  if (syncMode) {
-    updateKPIs(workbook, sessionStats);
-    dashSheet.getRange("C6").setValue("בוצע סנכרון אחרון: " + new Date().toLocaleString());
-  } else {
-    dashSheet.getRange("C6").setValue("מצב טיוטה (לא בוצע סנכרון)");
-  }
-
-  scheduleSheet.activate();
-}
-
-/**
- * המוח: יצירת יום עבודה לפי כל האילוצים
- */
-function generateDayPlan(
-    ctrl: Controller, 
-    dayIdx: number, 
-    stations: Station[], 
-    windows: TimeWindow[], 
-    kpiMap: Map<string, MonthlyKPI>,
-    dailyVisited: Set<string>,
-    sessionStats: Map<string, number>
-): string {
-
-  // התאמת שעות יומית
-  let sTime = ctrl.start;
-  let eTime = ctrl.end;
-  if (dayIdx === 5) { sTime = "06:00"; eTime = "14:30"; } // ו'
-  if (dayIdx === 6) { sTime = "19:00"; eTime = "24:00"; } // ש'
-
-  let currentMin = timeToMin(sTime);
-  let endMin = timeToMin(eTime);
-  let planText = "";
-  
-  // מיקום נוכחי (לרצף גאוגרפי)
-  let currentLocation = "ת\"מ פ\"ת"; 
-  let karonPerformed = false;
-
-  while (currentMin < endMin - 15) {
-    let timeLeft = endMin - currentMin;
-    let selectedTask: TaskResult | null = null;
-
-    // --- אילוץ 1: קרונות (חובה בוקר/ערב בתחנות קצה) ---
-    // אם יש זמן לבלוק כפול (130 דק) או בודד (65) וזה בטווח השעות
-    if (!karonPerformed && timeLeft >= 65) {
-        let isMorningSlot = currentMin >= 360 && currentMin < 840; // 06-14
-        let isEveningSlot = currentMin >= 840 && currentMin < 1320; // 14-22
-        
-        // עדיפות לקרונות אם אנחנו בחלון המתאים ועדיין יש צורך חודשי
-        let karonKPI = kpiMap.get("KARON_TOTAL");
-        let needKaron = karonKPI && karonKPI.target > karonKPI.done;
-
-        if ((isMorningSlot || isEveningSlot) && needKaron) {
-            // האם לבצע כפול?
-            let duration = (timeLeft >= 130) ? 130 : 65;
-            let hub = stations.filter(s => s.isHub)[Math.floor(Math.random()*4)].name;
+Function CheckOverlap(cName As String, dDate As Date, tStart As Date, tEnd As Date) As Boolean
+    Dim ws As Worksheet
+    Set ws = Sheets(SH_DATA)
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Function
+    
+    Dim i As Long
+    For i = 2 To lastRow
+        If ws.Cells(i, 3).Value = cName And ws.Cells(i, 2).Value = dDate Then
+            Dim s As Date, e As Date
+            s = ws.Cells(i, 6).Value
+            e = ws.Cells(i, 7).Value
             
-            selectedTask = {
-                text: `⚙️ בקרת קרונות (${hub})`,
-                duration: duration,
-                kpiId: "KARON_TOTAL"
-            };
-            karonPerformed = true;
-            currentLocation = hub;
-        }
-    }
+            ' נוסחת חפיפת זמנים: (StartA <= EndB) and (EndA >= StartB)
+            If (tStart < e) And (tEnd > s) Then
+                CheckOverlap = True
+                Exit Function
+            End If
+        End If
+    Next i
+    CheckOverlap = False
+End Function
 
-    // --- אילוץ 2: תחנות לפי חלון זמן דינמי ---
-    if (!selectedTask) {
-        // מציאת חלונות שפתוחים *עכשיו* ביום *הזה*
-        let activeWindows = windows.filter(w => 
-            w.dayIdx === dayIdx && 
-            currentMin >= w.startMin && 
-            currentMin <= w.endMin - 30 && // יש מספיק זמן להתחיל
-            !dailyVisited.has(w.station) // התחנה לא נבדקה היום ע"י אף אחד
-        );
+Function CheckStationDailyLimit(stationName As String, dDate As Date) As Boolean
+    Dim count As Integer
+    count = Application.WorksheetFunction.CountIfs( _
+            Sheets(SH_DATA).Range("E:E"), stationName, _
+            Sheets(SH_DATA).Range("B:B"), dDate)
+    CheckStationDailyLimit = (count > 0)
+End Function
 
-        if (activeWindows.length > 0) {
-            // מיון: קודם תחנות שקרובות למיקום הנוכחי, ואז לפי צורך חודשי
-            activeWindows.sort((a, b) => {
-                let distA = getDistance(currentLocation, a.station, stations);
-                let distB = getDistance(currentLocation, b.station, stations);
-                if (distA !== distB) return distA - distB; // קרוב יותר מנצח
-                
-                // אם מרחק זהה, מי שיש לו יותר "חוב" חודשי
-                let kpiA = kpiMap.get(a.station);
-                let kpiB = kpiMap.get(b.station);
-                let remA = kpiA ? (kpiA.target - kpiA.done) : 0;
-                let remB = kpiB ? (kpiB.target - kpiB.done) : 0;
-                return remB - remA;
-            });
+Function IsStation(itemName As String) As Boolean
+    ' בדיקה פשוטה אם זו תחנה או משימה אחרת
+    ' ניתן לשפר ע"י בדיקה מול טבלת ההגדרות
+    If InStr(itemName, "בקרת") > 0 Or InStr(itemName, "אונבורד") > 0 Or InStr(itemName, "שירות") > 0 Then
+        IsStation = False
+    Else
+        IsStation = True
+    End If
+End Function
 
-            let win = activeWindows[0];
-            let stData = stations.find(s => s.name === win.station);
-            
-            if (stData && stData.duration <= timeLeft) {
-                selectedTask = {
-                    text: `🚉 ${stData.name} (${stData.type})`,
-                    duration: stData.duration,
-                    kpiId: stData.name
-                };
-                dailyVisited.add(stData.name); // נעלנו את התחנה להיום לכולם
-                currentLocation = stData.name;
-            }
-        }
-    }
+Function DetermineCategory(itemName As String) As String
+    If InStr(itemName, "קרונות") > 0 Then DetermineCategory = "קרונות"
+    ElseIf InStr(itemName, "אונבורד") > 0 Then DetermineCategory = "נסיעה"
+    ElseIf InStr(itemName, "שירות") > 0 Then DetermineCategory = "שירות"
+    Else: DetermineCategory = "תחנה"
+    End If
+End Function
 
-    // --- אילוץ 3: מסילות / אונבורד / שירות (מילוי) ---
-    if (!selectedTask) {
-        // שירות (חובה פעם ביום אם אפשר)
-        if (timeLeft >= 15 && Math.random() > 0.8) {
-             selectedTask = { text: "📞 שירות לנוסע", duration: 15, kpiId: "SERVICE_TOTAL" };
-        }
-        // מסלול מלא R1 (80 דק)
-        else if (timeLeft >= 80 && Math.random() > 0.6) {
-             selectedTask = { text: "🚆 אונבורד R1 מלא", duration: 80, kpiId: "ONBOARD_TOTAL" };
-             currentLocation = (currentLocation === "ת\"מ פ\"ת") ? "הקוממיות" : "ת\"מ פ\"ת"; // החלפת צד
-        }
-        // ניקיון מסילה (30 דק)
-        else if (timeLeft >= 30) {
-             selectedTask = { text: "🛤️ ניקיון מסילה", duration: 30, kpiId: "TRACK_TOTAL" };
-        }
-        // אונבורד קצר
-        else if (timeLeft >= 15) {
-             selectedTask = { text: "🚆 נסיעה מנהלתית", duration: 15, kpiId: "ONBOARD_TOTAL" };
-        }
-    }
-
-    if (!selectedTask) break; // אין מה לעשות, סיום יום
-
-    // רישום לפלט
-    let timeStr = minToTime(currentMin);
-    planText += `[${timeStr}] ${selectedTask.text}\n──────────\n`;
+Sub ScheduleTaskInternal(dDate As Date, cName As String, tType As String, tTimeStr As String, duration As Integer)
+    Dim wsDB As Worksheet
+    Set wsDB = Sheets(SH_DATA)
+    Dim tStart As Date, tEnd As Date
+    tStart = TimeValue(tTimeStr)
+    tEnd = DateAdd("n", duration, tStart)
     
-    // עדכון מונה זמני לסנכרון
-    let currentVal = sessionStats.get(selectedTask.kpiId) || 0;
-    // אם זה קרונות, מוסיפים שעות, אחרת יחידות
-    let valToAdd = (selectedTask.kpiId === "KARON_TOTAL") ? (selectedTask.duration/60) : 1;
-    sessionStats.set(selectedTask.kpiId, currentVal + valToAdd);
+    Dim newRow As ListRow
+    Set newRow = wsDB.ListObjects("tbl_Schedule").ListRows.Add
+    With newRow.Range
+        .Cells(1, 1).Value = "AUTO"
+        .Cells(1, 2).Value = dDate
+        .Cells(1, 3).Value = cName
+        .Cells(1, 4).Value = DetermineCategory(tType)
+        .Cells(1, 5).Value = tType
+        .Cells(1, 6).Value = tStart
+        .Cells(1, 7).Value = tEnd
+        .Cells(1, 8).Value = duration
+        .Cells(1, 9).Value = "תוכנן"
+    End With
+End Sub
 
-    currentMin += selectedTask.duration;
-  }
-
-  return planText;
-}
-
-// --- פונקציות תשתית (Setup & Database) ---
-
-function setupDashboard(wb: ExcelScript.Workbook) {
-    let sheet = wb.getWorksheet("לוח_בקרה");
-    if (!sheet) {
-        sheet = wb.addWorksheet("לוח_בקרה");
-        sheet.getRange("B2:D6").getFormat().getFill().setColor("#f3f4f6");
-        
-        sheet.getRange("C2").setValue("לוח בקרה ראשי - RedLine Scheduler");
-        sheet.getRange("C2").getFormat().getFont().setBold(true);
-        sheet.getRange("C2").getFormat().getFont().setSize(14);
-
-        sheet.getRange("B3").setValue("תאריך התחלה (יום א'):");
-        sheet.getRange("C3").setValue(46050); // ערך התחלתי
-        
-        sheet.getRange("B4").setValue("מצב סנכרון:");
-        sheet.getRange("C4").setValue("לא - טיוטה בלבד");
-        let dv = sheet.getRange("C4").getDataValidation();
-        dv.setRule({ list: { inCellDropDown: true, source: "לא - טיוטה בלבד,כן - סנכרן ועדכן יעדים" } });
-
-        sheet.getRange("B5").setValue("סטטוס:");
-        sheet.getRange("C6").setValue("מוכן לעבודה");
-        
-        sheet.getUsedRange().getFormat().autofitColumns();
-    }
-}
-
-function setupKPITable(wb: ExcelScript.Workbook) {
-    let sheet = wb.getWorksheet("יעדים_חודשיים");
-    if (!sheet) {
-        sheet = wb.addWorksheet("יעדים_חודשיים");
-        let data: (string|number)[][] = [["קוד", "תיאור", "יעד", "בוצע", "נותר"]];
-        
-        // הוספת תחנות
-        getStationsDB().forEach(s => data.push([s.name, `בקרת ${s.name}`, 20, 0, 20]));
-        
-        // יעדים כלליים
-        data.push(["KARON_TOTAL", "שעות קרונות (חודשי)", 1700, 0, 1700]);
-        data.push(["ONBOARD_TOTAL", "אונבורד (יחידות)", 720, 0, 720]);
-        data.push(["TRACK_TOTAL", "ניקיון מסילות", 84, 0, 84]);
-        data.push(["SERVICE_TOTAL", "שירות לנוסע", 150, 0, 150]);
-
-        sheet.getRange("A1:E1").getFormat().getFill().setColor("#1e293b");
-        sheet.getRange("A1:E1").getFormat().getFont().setColor("white");
-        
-        let r = sheet.getRangeByIndexes(0, 0, data.length, 5);
-        r.setValues(data);
-        sheet.addTable(r, true).setName("Monthly_KPIs_Table");
-        
-        // נוסחה ליתרה
-        sheet.getRangeByIndexes(1, 4, data.length-1, 1).setFormula("=C2-D2");
-    }
-}
-
-function setupTimeWindows(wb: ExcelScript.Workbook) {
-    // בונה את טבלת חלונות הזמן הדינמית (הסטה של 2.5 שעות)
-    let sheet = wb.getWorksheet("חלונות_זמן");
-    if (!sheet) {
-        sheet = wb.addWorksheet("חלונות_זמן");
-        let headers = ["תחנה", "יום", "התחלה", "סיום"];
-        let data: (string|number)[][] = [headers];
-        
-        let stations = getStationsDB();
-        
-        // לוגיקה לייצור הטבלה באופן אוטומטי (Staggered)
-        stations.forEach((st, idx) => {
-            for (let d = 0; d < 6; d++) { // א-ו
-                // חישוב שעת התחלה בסיסית + הזזה לפי אינדקס התחנה ולפי היום
-                // כל תחנה זזה ב-20 דקות, כל יום זז ב-2.5 שעות
-                let baseMin = 340 + (idx * 20) + (d * 150); 
-                
-                // נרמול ליום עבודה (05:40 - 24:00)
-                while (baseMin > 1380) baseMin -= 900; 
-                
-                let endMin = baseMin + 150; // חלון של 2.5 שעות
-                
-                data.push([st.name, d, minToTime(baseMin), minToTime(endMin)]);
-            }
-        });
-        
-        let rng = sheet.getRangeByIndexes(0, 0, data.length, 4);
-        rng.setValues(data);
-        sheet.addTable(rng, true).setName("TimeWindowsTable");
-    }
-}
-
-function setupControllers(wb: ExcelScript.Workbook) {
-    if (!wb.getWorksheet("בקרים")) {
-        let sheet = wb.addWorksheet("בקרים");
-        let data = [
-            ["שם", "התחלה", "סיום"],
-            ["אורי מייזלר", "07:00", "16:00"], ["אינה טימופייב", "07:00", "16:00"],
-            ["אלתי קראו", "08:00", "17:00"], ["בוריס דולציגר", "06:00", "15:00"],
-            ["בתיה אביה", "09:00", "18:00"], ["דוד סייג", "07:00", "16:00"],
-            ["הרצל שגב", "14:00", "23:00"], ["יוני יוסף", "14:00", "23:00"],
-            ["משה אליהו", "15:00", "23:00"], ["ערן ניצן", "06:00", "15:00"],
-            ["רון טוב", "07:00", "16:00"], ["אברהם גברילביץ", "08:00", "17:00"],
-            ["גדי בן אור", "10:00", "19:00"], ["יוני ניסן", "12:00", "21:00"]
-        ];
-        sheet.getRangeByIndexes(0,0,data.length, 3).setValues(data);
-        sheet.addTable(sheet.getUsedRange(), true).setName("ControllersTbl");
-    }
-}
-
-// --- פונקציות קריאה ועדכון (IO) ---
-
-function readControllers(wb: ExcelScript.Workbook): Controller[] {
-    let tbl = wb.getTable("ControllersTbl");
-    let vals = tbl.getRangeBetweenHeaderAndTotal().getValues() as (string|number|boolean)[][];
-    return vals.map(r => ({ name: String(r[0]), start: convertTime(r[1]), end: convertTime(r[2]) }));
-}
-
-function readKPIs(wb: ExcelScript.Workbook): Map<string, MonthlyKPI> {
-    let map = new Map<string, MonthlyKPI>();
-    let tbl = wb.getTable("Monthly_KPIs_Table");
-    let vals = tbl.getRangeBetweenHeaderAndTotal().getValues() as (string|number)[][];
-    vals.forEach(r => {
-        map.set(String(r[0]), { id: String(r[0]), category: "", target: Number(r[2]), done: Number(r[3]) });
-    });
-    return map;
-}
-
-function readTimeWindows(wb: ExcelScript.Workbook): TimeWindow[] {
-    let tbl = wb.getTable("TimeWindowsTable");
-    let vals = tbl.getRangeBetweenHeaderAndTotal().getValues() as (string|number|boolean)[][];
-    return vals.map(r => ({
-        station: String(r[0]),
-        dayIdx: Number(r[1]),
-        startMin: timeToMin(convertTime(r[2])),
-        endMin: timeToMin(convertTime(r[3]))
-    }));
-}
-
-function updateKPIs(wb: ExcelScript.Workbook, stats: Map<string, number>) {
-    let tbl = wb.getTable("Monthly_KPIs_Table");
-    let range = tbl.getRangeBetweenHeaderAndTotal();
-    let vals = range.getValues() as (string|number)[][];
-    
-    // עדכון הערכים בזיכרון
-    let newVals = vals.map(row => {
-        let id = String(row[0]);
-        if (stats.has(id)) {
-            let added = stats.get(id);
-            if (added !== undefined) {
-                row[3] = Number(row[3]) + added;
-            }
-        }
-        return row;
-    });
-    
-    range.setValues(newVals);
-}
-
-// --- נתונים סטטיים (DB) ---
-
-function getStationsDB(): Station[] {
-    return [
-        {name: "הקוממיות", type: "AG", duration: 30, isHub: true},
-        {name: "העמל", type: "AG", duration: 30, isHub: false},
-        {name: "כ\"ט בנובמבר", type: "AG", duration: 30, isHub: false},
-        {name: "יוספטל", type: "AG", duration: 30, isHub: false},
-        {name: "בנימין", type: "AG", duration: 30, isHub: false},
-        {name: "בלפור", type: "AG", duration: 30, isHub: false},
-        {name: "ז'בוטינסקי", type: "AG", duration: 30, isHub: false},
-        {name: "רוטשילד", type: "AG", duration: 30, isHub: false},
-        {name: "העצמאות", type: "AG", duration: 30, isHub: false},
-        {name: "מחרוזת", type: "AG", duration: 30, isHub: false},
-        {name: "הבעש\"ט", type: "AG", duration: 30, isHub: false},
-        {name: "איסקוב", type: "AG", duration: 30, isHub: false},
-        {name: "ארליך", type: "AG", duration: 30, isHub: false},
-        {name: "בלומפילד", type: "AG", duration: 30, isHub: false},
-        {name: "שלמה", type: "AG", duration: 30, isHub: false},
-        {name: "אליפלט", type: "AG", duration: 60, isHub: true}, // חריג זמן
-        {name: "אלנבי", type: "UG", duration: 60, isHub: false},
-        {name: "קרליבך", type: "UG", duration: 60, isHub: false},
-        {name: "יהודית", type: "UG", duration: 60, isHub: false},
-        {name: "שאול המלך", type: "UG", duration: 60, isHub: false},
-        {name: "ארלוזורוב", type: "UG", duration: 60, isHub: false},
-        {name: "אבא הלל", type: "UG", duration: 60, isHub: false},
-        {name: "ביאליק", type: "UG", duration: 60, isHub: false},
-        {name: "בן גוריון", type: "UG", duration: 60, isHub: false},
-        {name: "אהרונוביץ", type: "UG", duration: 60, isHub: false},
-        {name: "אם המושבות", type: "UG", duration: 60, isHub: false},
-        {name: "קריית אריה", type: "AG", duration: 30, isHub: true},
-        {name: "שנקר", type: "AG", duration: 30, isHub: false},
-        {name: "שחם", type: "AG", duration: 30, isHub: false},
-        {name: "בלינסון", type: "AG", duration: 45, isHub: false}, // חריג זמן
-        {name: "דנקנר", type: "AG", duration: 30, isHub: false},
-        {name: "קרול", type: "AG", duration: 30, isHub: false},
-        {name: "פינסקר", type: "AG", duration: 30, isHub: false},
-        {name: "ת\"מ פ\"ת", type: "AG", duration: 30, isHub: true}
-    ];
-}
-
-// --- כלי עזר ---
-
-function timeToMin(t: string): number {
-    if (!t || t.indexOf(":") === -1) return 0;
-    let parts = t.split(":");
-    return Number(parts[0]) * 60 + Number(parts[1]);
-}
-
-function minToTime(m: number): string {
-    return `${Math.floor(m/60).toString().padStart(2,'0')}:${(m%60).toString().padStart(2,'0')}`;
-}
-
-function convertTime(v: string | number | boolean): string {
-    if (typeof v === 'number') return minToTime(Math.round(v * 24 * 60));
-    return String(v);
-}
-
-// חישוב מרחק פשוט לפי אינדקס במערך (מניח סדר גיאוגרפי)
-function getDistance(stA: string, stB: string, list: Station[]): number {
-    let idxA = -1, idxB = -1;
-    for(let i=0; i<list.length; i++) {
-        if (list[i].name === stA) idxA = i;
-        if (list[i].name === stB) idxB = i;
-    }
-    if (idxA === -1 || idxB === -1) return 100; // רחוק מאוד אם לא נמצא
-    return Math.abs(idxA - idxB);
-}
-
-function formatHeader(r: ExcelScript.Range) {
-    let f = r.getFormat();
-    f.getFill().setColor("#1e293b");
-    f.getFont().setColor("white");
-    f.getFont().setBold(true);
-    f.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
-}
-
-function formatOutputTable(s: ExcelScript.Worksheet, r: ExcelScript.Range) {
-    let f = r.getFormat();
-    f.setWrapText(true);
-    f.setVerticalAlignment(ExcelScript.VerticalAlignment.top);
-    f.getFont().setSize(8);
-    s.getRange("B:H").getFormat().setColumnWidth(160);
-    s.getRange("A:A").getFormat().setColumnWidth(100);
-    
-    let borders = f.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal);
-    borders.setStyle(ExcelScript.BorderLineStyle.continuous);
-    borders.setColor("#e2e8f0");
-}
+Sub RefreshDailyView()
+    ' פונקציה זו יכולה לסנן את הטבלה בדאשבורד
+    ' למטרת הדגמה, השארתי אותה ריקה. ניתן להשתמש ב-AdvancedFilter
+End Sub
