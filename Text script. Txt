@@ -2,7 +2,7 @@ function main(workbook: ExcelScript.Workbook) {
   // התחלת מדידת זמן
   let startTime = new Date().getTime();
   
-  console.log("מתחיל בתהליך הסריקה...");
+  console.log("מתחיל בתהליך הסריקה (עמודות L,M -> N,O)...");
 
   const sheet = workbook.getActiveWorksheet();
   const usedRange = sheet.getUsedRange();
@@ -14,7 +14,7 @@ function main(workbook: ExcelScript.Workbook) {
 
   // חישוב גודל הטווח
   const lastRowIndex = usedRange.getLastRow().getRowIndex();
-  // סך הכל שורות לעיבוד (מתחילים משורה 2, אז מחסרים 1 מהגובה הכולל אם התחלנו מ-0, אבל כאן הלוגיקה פשוטה יותר: שורת סיום פחות 1)
+  // סך הכל שורות לעיבוד (מתחילים משורה 2)
   const rowCount = lastRowIndex; 
 
   if (rowCount < 1) {
@@ -24,10 +24,15 @@ function main(workbook: ExcelScript.Workbook) {
 
   console.log(`נמצאו ${rowCount} שורות לעיבוד. טוען נתונים לזיכרון...`);
 
-  // קריאת העמודות הרלוונטיות בלבד לזיכרון לשיפור ביצועים
-  // X=23, Y=24 | AS=44, AT=45
-  const sourceRange = sheet.getRangeByIndexes(1, 23, rowCount, 2); // עמודות מקור X, Y
-  const targetRange = sheet.getRangeByIndexes(1, 44, rowCount, 2); // עמודות יעד AS, AT
+  // --- שינוי הגדרת העמודות ---
+  // עמודה L היא אינדקס 11 (A=0, K=10, L=11)
+  // עמודה N היא אינדקס 13
+  // אנו קוראים בלוק של 2 עמודות בכל פעם:
+  // sourceRange = L, M (עמודות 11, 12)
+  // targetRange = N, O (עמודות 13, 14)
+
+  const sourceRange = sheet.getRangeByIndexes(1, 11, rowCount, 2); // עמודות מקור L, M
+  const targetRange = sheet.getRangeByIndexes(1, 13, rowCount, 2); // עמודות יעד N, O
 
   // טעינת הערכים
   const sourceValues = sourceRange.getValues();
@@ -38,10 +43,10 @@ function main(workbook: ExcelScript.Workbook) {
   let hasChanges = false;
   
   // מונים לסטטיסטיקה
-  let countChangedAS = 0;
-  let countChangedAT = 0;
+  let countChangedN = 0;
+  let countChangedO = 0;
   
-  // --- הגדרה חדשה: דיווח כל 200 שורות ---
+  // דיווח כל 200 שורות
   const logBatchSize = 200; 
 
   console.log("הנתונים נטענו בהצלחה, מתחיל בעיבוד השורות...");
@@ -50,22 +55,24 @@ function main(workbook: ExcelScript.Workbook) {
   for (let i = 0; i < rowCount; i++) {
     
     // שליפת הערכים מהמערך בזיכרון
-    let valAS = targetValues[i][0];
-    let valAT = targetValues[i][1];
+    // אינדקס 0 במערך המקומי = העמודה השמאלית בטווח (N או L)
+    // אינדקס 1 במערך המקומי = העמודה הימנית בטווח (O או M)
+    
+    let valN = targetValues[i][0]; // הערך הנוכחי בעמודה N
+    let valO = targetValues[i][1]; // הערך הנוכחי בעמודה O
     let rowChanged = false;
 
-    // --- בדיקה עבור AS ---
-    // מוודאים שזה סטרינג לפני הבדיקה כדי למנוע שגיאות
-    if (typeof valAS === 'string' && zPattern.test(valAS)) {
-      targetValues[i][0] = sourceValues[i][0]; // העתקה מ-X
-      countChangedAS++;
+    // --- בדיקה עבור עמודה N (העתקה מ-L) ---
+    if (typeof valN === 'string' && zPattern.test(valN)) {
+      targetValues[i][0] = sourceValues[i][0]; // העתקה מ-L
+      countChangedN++;
       rowChanged = true;
     }
 
-    // --- בדיקה עבור AT ---
-    if (typeof valAT === 'string' && zPattern.test(valAT)) {
-      targetValues[i][1] = sourceValues[i][1]; // העתקה מ-Y
-      countChangedAT++;
+    // --- בדיקה עבור עמודה O (העתקה מ-M) ---
+    if (typeof valO === 'string' && zPattern.test(valO)) {
+      targetValues[i][1] = sourceValues[i][1]; // העתקה מ-M
+      countChangedO++;
       rowChanged = true;
     }
 
@@ -82,10 +89,10 @@ function main(workbook: ExcelScript.Workbook) {
 
   // שלב השמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
   if (hasChanges) {
-    console.log("סיימתי עיבוד. כותב את השינויים חזרה לאקסל...");
+    console.log("סיימתי עיבוד. כותב את השינויים חזרה לאקסל (עמודות N, O)...");
     targetRange.setValues(targetValues);
   } else {
-    console.log("לא נמצאה האות 'z' באף תא. לא בוצעה כתיבה.");
+    console.log("לא נמצאה האות 'z' באף תא בעמודות N או O. לא בוצעה כתיבה.");
   }
 
   // חישוב זמנים וסיכום
@@ -96,9 +103,9 @@ function main(workbook: ExcelScript.Workbook) {
   console.log("             סיכום ביצוע                 ");
   console.log("-----------------------------------------");
   console.log(`סה"כ שורות שנבדקו: ${rowCount}`);
-  console.log(`החלפות שבוצעו בעמודה AS: ${countChangedAS}`);
-  console.log(`החלפות שבוצעו בעמודה AT: ${countChangedAT}`);
-  console.log(`סה"כ החלפות: ${countChangedAS + countChangedAT}`);
+  console.log(`החלפות שבוצעו בעמודה N (מקור L): ${countChangedN}`);
+  console.log(`החלפות שבוצעו בעמודה O (מקור M): ${countChangedO}`);
+  console.log(`סה"כ החלפות: ${countChangedN + countChangedO}`);
   console.log(`זמן ריצה כולל: ${duration} שניות`);
   console.log("-----------------------------------------");
 }
