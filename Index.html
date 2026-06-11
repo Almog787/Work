@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>סיכום התנעה - מערכת AI לסידור עבודה</title>
+    
+    <!-- Google Fonts: Heebo for Hebrew -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { font-family: 'Heebo', sans-serif; background-color: #f3f4f6; }
+        .slide { display: none; opacity: 0; transition: opacity 0.4s ease-in-out; }
+        .slide.active { display: flex; opacity: 1; }
+        
+        /* Grid background pattern */
+        .bg-grid {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-2 lg:p-6 bg-slate-100">
+
+    <!-- Presentation Container -->
+    <div class="relative w-full max-w-6xl aspect-auto min-h-[600px] lg:aspect-[16/9] bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 bg-grid flex flex-col">
+        
+        <!-- ================= SLIDES ================= -->
+
+        <!-- Slide 1: Title -->
+        <div class="slide active flex-col items-center justify-center text-center h-full w-full p-10">
+            <div class="mb-8">
+                <i class="fa-solid fa-code-branch text-6xl text-slate-300 mb-6"></i>
+            </div>
+            <h1 class="text-5xl lg:text-7xl font-extrabold text-slate-800 mb-6">מעבר מסימני שאלה לסימני קריאה</h1>
+            <h2 class="text-2xl lg:text-4xl text-slate-600 mb-12">מסגרת ההחלטות לפיתוח מערכת AI לסידור עבודה לבקרי שטח (MVP)</h2>
+            <div class="mt-auto pt-10 border-t border-slate-200 w-full">
+                <p class="text-lg text-slate-500 font-semibold">סיכום התנעה ואישור חלופות טכנולוגיות</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: The Challenge -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-12">האתגר: חיבור בין יעדים, זמינות וביצוע בזמן אמת</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 flex-grow items-center">
+                <div class="bg-amber-100 border-2 border-amber-300 rounded-xl p-8 text-center shadow-md relative">
+                    <i class="fa-regular fa-calendar-alt text-5xl text-amber-600 mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">התכנון החודשי</h3>
+                    <p>בניית בנק משימות ויעדים (מה צריך לבצע).</p>
+                    <i class="fa-solid fa-arrow-left absolute top-1/2 -left-6 text-2xl text-slate-400 hidden md:block"></i>
+                </div>
+                
+                <div class="bg-teal-100 border-2 border-teal-300 rounded-xl p-8 text-center shadow-md relative transform scale-105 z-10">
+                    <i class="fa-solid fa-scale-balanced text-5xl text-teal-600 mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">האיזון השבועי</h3>
+                    <p>קליטת זמינות, איזון עומסים ושיבוץ (מי זמין ומתי).</p>
+                    <i class="fa-solid fa-arrow-left absolute top-1/2 -left-6 text-2xl text-slate-400 hidden md:block"></i>
+                </div>
+
+                <div class="bg-blue-100 border-2 border-blue-300 rounded-xl p-8 text-center shadow-md relative">
+                    <i class="fa-solid fa-triangle-exclamation text-5xl text-blue-600 mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">הביצוע היומי</h3>
+                    <p>טיפול בחריגות, שינויים והשלמות (ביצוע בפועל).</p>
+                </div>
+            </div>
+
+            <div class="mt-8 bg-slate-200 text-slate-800 text-center py-4 rounded-b-xl border-x border-b border-slate-300 shadow-inner font-semibold text-lg">
+                המערכת <span class="text-red-600 underline">אינה מחליפה</span> את מנוע השיבוץ, אלא מהווה סוכן AI שמחבר בין השכבות, מסביר החלטות ומנהל חריגות.
+            </div>
+        </div>
+
+        <!-- Slide 3: Compass -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-12">המצפן שלנו לקבלת החלטות: צמתים של פיתוח</h2>
+            
+            <div class="grid grid-cols-2 gap-12 flex-grow">
+                <!-- MVP -->
+                <div class="bg-white border-2 border-emerald-500 rounded-2xl p-8 text-center shadow-lg flex flex-col items-center justify-center relative overflow-hidden">
+                    <div class="bg-emerald-50 absolute inset-0 -z-10"></div>
+                    <i class="fa-solid fa-building text-7xl text-slate-700 mb-6"></i>
+                    <h3 class="text-3xl font-bold mb-6">מהירות בנייה ואמון תפעולי (MVP)</h3>
+                    <div class="flex gap-4 justify-center">
+                        <span class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold">השקה מיידית</span>
+                        <span class="bg-slate-700 text-white px-4 py-2 rounded-lg font-bold">חוקים קשיחים</span>
+                        <span class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold">יציבות</span>
+                    </div>
+                </div>
+
+                <!-- V2 -->
+                <div class="bg-white border-2 border-blue-400 rounded-2xl p-8 text-center shadow-lg flex flex-col items-center justify-center relative overflow-hidden opacity-80">
+                    <div class="bg-blue-50 absolute inset-0 -z-10"></div>
+                    <i class="fa-solid fa-network-wired text-7xl text-blue-500 mb-6"></i>
+                    <h3 class="text-3xl font-bold mb-6">יעילות ואלגוריתמיקה מתקדמת (V2.0)</h3>
+                    <div class="flex gap-4 justify-center">
+                        <span class="bg-orange-400 text-white px-4 py-2 rounded-lg font-bold">אופטימיזציה עמוקה</span>
+                        <span class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">AI מורכב</span>
+                        <span class="bg-orange-400 text-white px-4 py-2 rounded-lg font-bold">גמישות מקסימלית</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 bg-slate-100 border border-slate-300 text-center py-4 rounded-xl font-semibold text-xl">
+                לכל דילמה מהותית שעלתה בהתנעה, נבחן את הדרך המהירה מול הדרך החכמה.
+            </div>
+        </div>
+
+        <!-- Slide 4: Dilemma 1 -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-10 border-b pb-4">דילמה 1: תשתית נתונים – איך מתחילים לאסוף מידע?</h2>
+            
+            <div class="grid grid-cols-2 gap-10 flex-grow">
+                <!-- Option A -->
+                <div class="flex flex-col border-2 border-blue-800 rounded-xl overflow-hidden shadow-xl">
+                    <div class="bg-blue-800 text-white text-center py-3 text-2xl font-bold">חלופה א': Google Sheets / Excel</div>
+                    <div class="p-8 text-center flex-grow bg-white">
+                        <i class="fa-solid fa-file-excel text-7xl text-green-600 mb-6"></i>
+                        <div class="bg-slate-100 p-4 rounded text-lg mb-8 font-semibold">קבצי גליונות חכמים כמסד נתונים וממשק בק אופיס.</div>
+                        <ul class="text-right space-y-6">
+                            <li class="flex items-center"><span class="w-32 font-bold">זמן הקמה:</span> <div class="flex-grow bg-green-500 h-6 rounded"><span class="mr-2 text-white text-sm font-bold leading-6">יום אחד</span></div></li>
+                            <li class="flex items-center"><span class="w-32 font-bold">עלויות:</span> <div class="flex-grow border-2 border-green-500 h-6 rounded text-center"><span class="text-green-700 text-sm font-bold leading-5">אפס</span></div></li>
+                            <li class="flex items-center"><span class="w-32 font-bold text-red-600">חשיפה לטעויות:</span> <div class="flex-grow bg-red-500 h-6 rounded"><span class="mr-2 text-white text-sm font-bold leading-6">גבוהה (אין ולידציה)</span></div></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Option B -->
+                <div class="flex flex-col border-2 border-slate-300 rounded-xl overflow-hidden shadow-md opacity-90">
+                    <div class="bg-slate-300 text-slate-800 text-center py-3 text-2xl font-bold">חלופה ב': פלטפורמת Low-Code</div>
+                    <div class="p-8 text-center flex-grow bg-slate-50">
+                        <i class="fa-solid fa-mobile-screen-button text-7xl text-blue-500 mb-6"></i>
+                        <div class="bg-white border p-4 rounded text-lg mb-8 font-semibold">מיני-אפליקציה ייעודית עם ממשק מודרני לבק אופיס ולשטח.</div>
+                        <ul class="text-right space-y-6">
+                            <li class="flex items-center"><span class="w-32 font-bold text-orange-500">זמן הקמה:</span> <div class="w-1/2 bg-orange-400 h-6 rounded"><span class="mr-2 text-white text-sm font-bold leading-6">שבועיים+</span></div></li>
+                            <li class="flex items-center"><span class="w-32 font-bold text-orange-500">עלויות:</span> <div class="w-2/3 bg-orange-400 h-6 rounded"><span class="mr-2 text-white text-sm font-bold leading-6">רישוי חודשי</span></div></li>
+                            <li class="flex items-center"><span class="w-32 font-bold text-green-600">חשיפה לטעויות:</span> <div class="w-1/4 bg-green-500 h-6 rounded"><span class="mr-2 text-white text-sm font-bold leading-6">נמוכה</span></div></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Dilemma 2 -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-10 border-b pb-4">דילמה 2: מודל העסקה ומשמרות – נוקשות מול גמישות</h2>
+            
+            <div class="grid grid-cols-2 gap-10 flex-grow">
+                <!-- Option A -->
+                <div class="flex flex-col border-2 border-blue-800 rounded-xl p-6 bg-white shadow-xl relative">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה א': מודל חוקים קשיח (Fixed Shifts)</h3>
+                    <div class="flex-grow flex flex-col items-center justify-center relative">
+                        <!-- Visual representation of fixed shift -->
+                        <div class="w-full flex bg-blue-900 h-16 rounded mb-2">
+                            <div class="w-5/12 border-r-2 border-white"></div>
+                            <div class="w-1/12 bg-white flex items-center justify-center text-xs font-bold">הפסקה</div>
+                            <div class="w-5/12 border-l-2 border-white"></div>
+                            <div class="w-1/12 bg-slate-300 pattern-diagonal-lines-sm flex items-center justify-center text-xs font-bold text-slate-600">זמן מת</div>
+                        </div>
+                        <p class="text-sm text-slate-500 text-center mt-2">הפסקה קבועה של 45 דק'</p>
+                    </div>
+                    <div class="space-y-3 mt-6">
+                        <div class="bg-blue-900 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-plus-circle ml-3 text-green-400"></i> ודאות מלאה לבקר</div>
+                        <div class="bg-blue-900 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-plus-circle ml-3 text-green-400"></i> קל לתכנות במנוע</div>
+                        <div class="bg-blue-900 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-minus-circle ml-3 text-red-400"></i> חוסר יעילות בסיום משימה מוקדם</div>
+                    </div>
+                </div>
+
+                <!-- Option B -->
+                <div class="flex flex-col border-2 border-slate-300 rounded-xl p-6 bg-slate-50 shadow-md">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה ב': מודל מבוסס משימות (Task-Based)</h3>
+                    <div class="flex-grow flex items-center justify-center">
+                        <i class="fa-solid fa-layer-group text-7xl text-blue-500 mb-4"></i>
+                        <!-- Abstract blocks concept -->
+                    </div>
+                    <div class="space-y-3 mt-6">
+                        <div class="bg-blue-500 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-plus-circle ml-3 text-green-300"></i> ניצול זמן מקסימלי</div>
+                        <div class="bg-blue-500 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-plus-circle ml-3 text-green-300"></i> מאפשר שיבוץ לפי קריאה</div>
+                        <div class="bg-blue-500 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-minus-circle ml-3 text-red-300"></i> אלגוריתם מורכב (חישוב רצפים)</div>
+                        <div class="bg-blue-500 text-white rounded-full px-4 py-2 flex items-center"><i class="fa-solid fa-minus-circle ml-3 text-red-300"></i> שוחק (היעדר שגרה)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Dilemma 3 -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-10 border-b pb-4">דילמה 3: שילובי בקרות – האם מערבבים משימות?</h2>
+            <div class="grid grid-cols-2 gap-10 flex-grow">
+                <!-- Option A -->
+                <div class="flex flex-col border-2 border-blue-800 rounded-xl p-6 bg-white shadow-xl relative">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה א': משמרת ייעודית (Dedicated Shifts)</h3>
+                    <div class="flex-grow flex items-center justify-center space-x-4 space-x-reverse">
+                        <i class="fa-solid fa-building text-4xl text-slate-500"></i>
+                        <i class="fa-solid fa-arrow-left text-2xl text-blue-800"></i>
+                        <i class="fa-solid fa-building text-4xl text-slate-500"></i>
+                        <i class="fa-solid fa-arrow-left text-2xl text-blue-800"></i>
+                        <i class="fa-solid fa-building text-4xl text-slate-500"></i>
+                    </div>
+                    <div class="mt-auto">
+                        <div class="bg-blue-900 text-white rounded p-3 mb-2 text-center font-bold">בקר מבצע רק סוג אחד של משימה (תחנות או קרונות).</div>
+                        <div class="bg-slate-200 p-3 rounded flex items-start text-sm font-semibold">
+                            <i class="fa-solid fa-check text-green-600 mt-1 ml-2 text-lg"></i>
+                            פשוט לניהול, פחות מעברי קונטקסט. פוגע בגמישות במקרה של צורך פתאומי.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Option B -->
+                <div class="flex flex-col border-2 border-slate-300 rounded-xl p-6 bg-slate-50 shadow-md">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה ב': משמרת היברידית (Hybrid Shifts)</h3>
+                    <div class="flex-grow flex items-center justify-center relative">
+                        <i class="fa-solid fa-building text-4xl text-blue-400 absolute right-10 bottom-10"></i>
+                        <i class="fa-solid fa-train text-5xl text-blue-600 absolute top-10"></i>
+                        <i class="fa-solid fa-building text-4xl text-blue-400 absolute left-10 bottom-10"></i>
+                        <svg class="w-full h-full" viewBox="0 0 100 100">
+                            <path d="M 80 80 Q 80 20 50 20 Q 20 20 20 80" fill="none" stroke="#60a5fa" stroke-width="3" stroke-dasharray="5,5"/>
+                        </svg>
+                    </div>
+                    <div class="mt-auto">
+                        <div class="bg-blue-500 text-white rounded p-3 mb-2 text-center font-bold">המערכת משבצת תחנות ורכבות באותה משמרת.</div>
+                        <div class="bg-orange-100 p-3 rounded flex items-start text-sm font-semibold text-orange-800">
+                            <i class="fa-solid fa-exclamation-triangle mt-1 ml-2 text-lg"></i>
+                            יעילות שיא. אך דורש מה-AI להבין עיכובים של תנועת רכבות בזמן אמת כדי לא לשבור משמרת.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Dilemma 4 -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-10 border-b pb-4">דילמה 4: חישוב זמני מעבר – איך מעריכים מרחקים?</h2>
+            <div class="grid grid-cols-2 gap-10 flex-grow">
+                <!-- Option A -->
+                <div class="flex flex-col border-2 border-blue-800 rounded-xl p-6 bg-white shadow-xl relative">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה א': מטריצת זמנים סטטית</h3>
+                    <div class="flex-grow flex items-center justify-center relative">
+                        <div class="border border-slate-300 w-full h-32 relative bg-slate-50 flex items-center justify-center">
+                            <div class="absolute left-1/4 w-8 h-8 rounded-full bg-blue-900 text-white flex items-center justify-center font-bold z-10">B</div>
+                            <div class="absolute right-1/4 w-8 h-8 rounded-full bg-blue-900 text-white flex items-center justify-center font-bold z-10">A</div>
+                            <div class="w-1/2 border-b-2 border-dashed border-slate-400 absolute"></div>
+                            <div class="bg-white border px-3 py-1 rounded shadow text-sm font-bold absolute -mt-12">קבוע: 20 דק'</div>
+                        </div>
+                    </div>
+                    <div class="mt-auto">
+                        <div class="bg-blue-900 text-white rounded p-3 mb-2 text-center font-bold">טבלת מרחקים שהוכנה מראש על ידי הבק אופיס.</div>
+                        <div class="bg-slate-200 p-3 rounded flex items-start text-sm font-semibold">
+                            <i class="fa-solid fa-check text-green-600 mt-1 ml-2"></i> פיתוח חינמי ומיידי.<br>
+                            <span class="text-red-500 mr-2">אבל</span> - לא מתחשב בפקקים או עומסים.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Option B -->
+                <div class="flex flex-col border-2 border-slate-300 rounded-xl p-6 bg-slate-50 shadow-md">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה ב': חיבור למנוע ניווט דינמי (API)</h3>
+                    <div class="flex-grow flex items-center justify-center relative">
+                        <i class="fa-solid fa-map-location-dot text-8xl text-blue-400"></i>
+                        <div class="bg-white border px-3 py-1 rounded shadow text-sm font-bold absolute -mt-20 ml-20">משתנה: 18-35 דק'</div>
+                    </div>
+                    <div class="mt-auto">
+                        <div class="bg-blue-500 text-white rounded p-3 mb-2 text-center font-bold">תשאול מפות בזמן אמת להערכת זמן מדוייקת.</div>
+                        <div class="bg-slate-200 p-3 rounded flex items-start text-sm font-semibold">
+                            <i class="fa-solid fa-plus text-green-600 mt-1 ml-2"></i> דיוק מושלם שמונע תלונות.<br>
+                            <span class="text-orange-500 mr-2">אבל</span> - עלויות אינטגרציה גבוהות ותשלום ל-API.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Dilemma 5 -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-10 border-b pb-4">דילמה 5: פילוסופיית האלגוריתם – מה קורה כשאין פתרון מושלם?</h2>
+            <div class="grid grid-cols-2 gap-10 flex-grow">
+                <!-- Option A -->
+                <div class="flex flex-col border-2 border-blue-800 rounded-xl p-6 bg-white shadow-xl relative">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה א': חוקים נוקשים (Rule-Based)</h3>
+                    <div class="flex-grow flex items-center justify-center">
+                        <div class="relative">
+                            <i class="fa-solid fa-laptop-code text-7xl text-slate-700"></i>
+                            <i class="fa-solid fa-lock text-5xl text-red-500 absolute -bottom-2 -right-4"></i>
+                            <div class="bg-red-600 text-white font-bold px-3 py-1 rounded absolute -top-4 -left-10 shadow border border-red-800">ERROR!</div>
+                        </div>
+                    </div>
+                    <div class="mt-auto">
+                        <div class="bg-blue-900 text-white rounded p-3 mb-2 text-center font-bold">חוקי חובה מוחלטים (שעות, חפיפות).</div>
+                        <div class="bg-slate-200 p-3 rounded text-sm font-semibold text-center">
+                            אם המנוע לא מוצא פתרון מושלם ⬅️ מחזיר שגיאה (דורש התערבות ידנית). מגן מוחלט מתביעות עבודה.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Option B -->
+                <div class="flex flex-col border-2 border-slate-300 rounded-xl p-6 bg-slate-50 shadow-md">
+                    <h3 class="text-2xl font-bold text-center mb-6">חלופה ב': מודל מבוסס קנסות (Penalty-Based)</h3>
+                    <div class="flex-grow flex items-center justify-center">
+                        <div class="bg-white border rounded shadow p-4 text-sm relative border-blue-300">
+                            <span class="bg-orange-400 text-white text-xs px-2 py-1 rounded absolute -top-3 right-2">AI Agent</span>
+                            "שיבצתי את יוסי למשמרת שנייה, כי 'הקנס' על תחנה ריקה גבוה יותר מהקנס על בקשת החופש שלו."
+                        </div>
+                    </div>
+                    <div class="mt-auto">
+                        <div class="bg-blue-500 text-white rounded p-3 mb-2 text-center font-bold">האלגוריתם מתפשר ומעניק ציונים כדי תמיד לייצר סידור.</div>
+                        <div class="bg-slate-200 p-3 rounded text-sm font-semibold">
+                            <i class="fa-solid fa-check text-blue-600"></i> המערכת משבצת עם מינימום נזק ומסבירה החלטות.<br>
+                            <i class="fa-solid fa-triangle-exclamation text-red-500"></i> סכנה: כיול שגוי ייצר סידורים אבסורדיים.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Roadmap -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-16">מטריצת ההחלטות האסטרטגית: לא או/או, אלא מתי</h2>
+            
+            <div class="flex items-center justify-center flex-grow relative px-10">
+                <!-- Timeline Line -->
+                <div class="absolute w-full h-1 bg-blue-300 left-0 top-1/2 z-0"></div>
+                
+                <div class="w-full flex justify-between relative z-10 gap-8">
+                    <!-- MVP Box -->
+                    <div class="w-1/2 bg-blue-800 text-white rounded-xl shadow-2xl p-6 transform -translate-y-4">
+                        <h3 class="text-2xl font-bold text-center mb-6 border-b border-blue-600 pb-2">גרסת ה-MVP (החודשים הקרובים)</h3>
+                        <div class="flex flex-wrap gap-3 justify-center mb-4">
+                            <span class="bg-white text-blue-900 px-4 py-2 rounded font-bold shadow">שימוש ב-Sheets</span>
+                            <span class="bg-white text-blue-900 px-4 py-2 rounded font-bold shadow">משמרות בלוק</span>
+                            <span class="bg-white text-blue-900 px-4 py-2 rounded font-bold shadow">חוקים קשיחים</span>
+                            <span class="bg-white text-blue-900 px-4 py-2 rounded font-bold shadow">משימות ייעודיות</span>
+                            <span class="bg-white text-blue-900 px-4 py-2 rounded font-bold shadow">מטריצת זמנים סטטית</span>
+                        </div>
+                        <div class="text-center mt-6 pt-4 border-t border-blue-600 text-lg font-bold text-blue-200">בניית אמון תפעולי בסביבה נשלטת</div>
+                    </div>
+
+                    <!-- V2 Box -->
+                    <div class="w-1/2 bg-slate-100 border-2 border-dashed border-blue-400 rounded-xl p-6 text-slate-700">
+                        <h3 class="text-2xl font-bold text-center mb-6 border-b border-slate-300 pb-2">מפת הדרכים - V2.0 (העתיד)</h3>
+                        <div class="flex flex-wrap gap-3 justify-center mb-4">
+                            <span class="bg-blue-500 text-white px-4 py-2 rounded shadow">אפליקציית Low-Code</span>
+                            <span class="bg-blue-500 text-white px-4 py-2 rounded shadow">משמרות גמישות</span>
+                            <span class="bg-blue-500 text-white px-4 py-2 rounded shadow">רוקים המרוזל</span>
+                            <span class="bg-blue-500 text-white px-4 py-2 rounded shadow">שילוב רכבות</span>
+                            <span class="bg-blue-500 text-white px-4 py-2 rounded shadow">חיבור ל-Waze API</span>
+                            <span class="bg-blue-500 text-white px-4 py-2 rounded shadow">מודל קנסות</span>
+                        </div>
+                        <div class="text-center mt-6 pt-4 border-t border-slate-300 text-lg font-bold text-slate-500">אופטימיזציה מקסימלית לאחר התייצבות</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Recommendation -->
+        <div class="slide flex-col h-full w-full p-10 bg-blue-50">
+            <h2 class="text-4xl font-bold text-center mb-10 text-blue-900">השורה התחתונה: ההמלצה המקצועית לפיתוח</h2>
+            
+            <div class="flex-grow flex items-center justify-center">
+                <div class="bg-white border-4 border-blue-800 rounded-2xl shadow-2xl p-10 max-w-4xl relative">
+                    <div class="absolute -top-6 -right-6 bg-yellow-400 rounded-full p-4 shadow-lg">
+                        <i class="fa-solid fa-lightbulb text-4xl text-yellow-800"></i>
+                    </div>
+                    <h3 class="text-3xl font-extrabold text-blue-800 text-center mb-8 leading-tight">
+                        לצורך מימוש מהיר ומוצלח של המערכת, אנו ממליצים לבחור בכל החלופות של <span class="underline">קבוצה א'</span> לגרסה הראשונה.
+                    </h3>
+                    
+                    <ul class="space-y-6 text-xl text-slate-700 font-semibold mt-8">
+                        <li class="flex items-start">
+                            <i class="fa-solid fa-check text-green-500 text-2xl ml-4 mt-1"></i>
+                            <p>המטרה העליונה כרגע היא לייצר אמון אצל עובדי הבק אופיס ואצל בקרי השטח.</p>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa-solid fa-check text-green-500 text-2xl ml-4 mt-1"></i>
+                            <p>מורכבות יתר טכנולוגית (חלופות ב') בשלב זה תגרום לעיכובים קריטיים והתנגדות בשטח.</p>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa-solid fa-check text-green-500 text-2xl ml-4 mt-1"></i>
+                            <p>רק לאחר שהאלגוריתם יוכיח את עצמו תחת חוקים קשיחים, נשחרר לו חבל לאופטימיזציה מתקדמת בגרסה 2.0.</p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 11: Scope -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-16">גבולות הגזרה: מה נכנס ל-MVP?</h2>
+            
+            <div class="flex items-center justify-center flex-grow">
+                <div class="flex space-x-4 space-x-reverse items-center justify-center w-full">
+                    
+                    <div class="bg-blue-800 text-white rounded-lg shadow-lg p-6 w-1/5 text-center transform scale-100 z-10 border-4 border-white outline outline-blue-800">
+                        <h4 class="text-xl font-bold mb-2">מודול זמינות</h4>
+                        <p class="text-sm">(קליטת בקרים קבועים וגמישים.)</p>
+                    </div>
+
+                    <i class="fa-solid fa-chevron-left text-slate-300 text-2xl"></i>
+
+                    <div class="bg-emerald-600 text-white rounded-lg shadow-lg p-6 w-1/5 text-center transform scale-100 z-10 border-4 border-white outline outline-emerald-600">
+                        <h4 class="text-xl font-bold mb-2">בנק משימות</h4>
+                        <p class="text-sm">(יעדים חודשיים ושבועיים.)</p>
+                    </div>
+
+                    <i class="fa-solid fa-chevron-left text-slate-300 text-2xl"></i>
+
+                    <div class="bg-blue-800 text-white rounded-lg shadow-2xl p-6 w-1/4 text-center transform scale-110 z-20 border-4 border-yellow-400">
+                        <h4 class="text-2xl font-extrabold mb-2 text-yellow-300">תכולת עבודה</h4>
+                        <p class="text-md font-bold">(בקרת תחנות בלבד - 680 בקרות + ימי חול ושישי.)</p>
+                    </div>
+
+                    <i class="fa-solid fa-chevron-left text-slate-200 text-2xl"></i>
+
+                    <div class="bg-slate-300 text-slate-500 rounded-lg p-6 w-1/5 text-center opacity-60">
+                        <h4 class="text-xl font-bold mb-2">On Board</h4>
+                        <p class="text-sm">(קרונות/רכבות ופיזור שעות מורכב.)</p>
+                    </div>
+
+                    <i class="fa-solid fa-chevron-left text-slate-200 text-2xl"></i>
+
+                    <div class="bg-slate-300 text-slate-500 rounded-lg p-6 w-1/5 text-center opacity-60">
+                        <h4 class="text-xl font-bold mb-2">הרחבה מלאה</h4>
+                        <p class="text-sm">(שירות לנוסע, מסילות.)</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-12 text-center text-2xl font-bold text-slate-800 border-t pt-6">
+                המלצה: מתחילים מתחנות בלבד. הוספת סוגי בקרות נוספים תבוצע רק לאחר הצלחת פיילוט התחנות.
+            </div>
+        </div>
+
+        <!-- Slide 12: Business Rules -->
+        <div class="slide flex-col h-full w-full p-10">
+            <h2 class="text-4xl font-bold text-center mb-12">חוקיות עסקית: הפרמטרים להזנת מנוע ה-AI</h2>
+            
+            <div class="grid grid-cols-2 gap-8 flex-grow max-w-5xl mx-auto w-full">
+                <!-- Box 1 -->
+                <div class="border border-slate-300 bg-white shadow-sm rounded-xl p-6 flex items-center">
+                    <i class="fa-regular fa-clock text-6xl text-slate-400 ml-6"></i>
+                    <div>
+                        <div class="text-lg text-slate-500 mb-1">מודל המשמרת</div>
+                        <div class="text-4xl font-extrabold text-blue-900 mb-1">8.5 שעות</div>
+                        <div class="text-sm font-semibold">(אורך משמרת רגילה)</div>
+                    </div>
+                </div>
+
+                <!-- Box 2 -->
+                <div class="border border-slate-300 bg-white shadow-sm rounded-xl p-6 flex items-center">
+                    <i class="fa-solid fa-mug-hot text-6xl text-slate-400 ml-6"></i>
+                    <div>
+                        <div class="text-lg text-slate-500 mb-1">חוקיות הפסקות</div>
+                        <div class="text-4xl font-extrabold text-blue-900 mb-1">45 דקות חובה</div>
+                        <div class="text-sm font-semibold">(משובץ בדיוק לאחר 4 שעות עבודה רצופות)</div>
+                    </div>
+                </div>
+
+                <!-- Box 3 -->
+                <div class="border border-slate-300 bg-white shadow-sm rounded-xl p-6 flex items-center">
+                    <i class="fa-solid fa-route text-6xl text-slate-400 ml-6"></i>
+                    <div>
+                        <div class="text-lg text-slate-500 mb-1">זמני מעבר</div>
+                        <div class="text-3xl font-extrabold text-blue-900 mb-1">מטריצת הבק אופיס</div>
+                        <div class="text-sm font-semibold">(המנוע יישען על טבלת מרחקים סטטית כמוגדרת כאילוץ חובה)</div>
+                    </div>
+                </div>
+
+                <!-- Box 4 -->
+                <div class="border border-slate-300 bg-white shadow-sm rounded-xl p-6 flex items-center">
+                    <i class="fa-solid fa-award text-6xl text-slate-400 ml-6"></i>
+                    <div>
+                        <div class="text-lg text-slate-500 mb-1">כשירויות מותרות</div>
+                        <div class="text-4xl font-extrabold text-blue-900 mb-1">ללא שילובים</div>
+                        <div class="text-sm font-semibold">(כל משמרת תוקדש לסוג בקרה אחד בלבד בשלב זה)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 13: Next Steps -->
+        <div class="slide flex-col h-full w-full p-10 bg-slate-50">
+            <h2 class="text-4xl font-bold text-center mb-12 text-blue-900">Next Steps: יוצאים לדרך</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 flex-grow">
+                <!-- Step 1 -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col overflow-hidden">
+                    <div class="bg-slate-100 p-6 text-center border-b border-slate-200">
+                        <h3 class="text-2xl font-bold mb-2">הכנת תשתית נתונים</h3>
+                        <span class="bg-slate-700 text-white px-3 py-1 rounded text-sm font-semibold">אחריות: צוות הבק אופיס</span>
+                    </div>
+                    <div class="p-8 flex-grow">
+                        <ul class="list-disc pl-4 pr-6 space-y-4 text-lg text-slate-700 font-medium">
+                            <li>השלמת קבצי נתוני אב (Master Data).</li>
+                            <li>הגדרת פרופיל כשירויות לבקרים.</li>
+                            <li>בניית טבלת יעדי תחנות (680 בקרות) לחודש הקרוב.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col overflow-hidden">
+                    <div class="bg-slate-100 p-6 text-center border-b border-slate-200">
+                        <h3 class="text-2xl font-bold mb-2">מיפוי זמני מעבר</h3>
+                        <span class="bg-slate-800 text-white px-3 py-1 rounded text-sm font-semibold">אחריות: תפעול / בק אופיס</span>
+                    </div>
+                    <div class="p-8 flex-grow">
+                        <ul class="list-disc pl-4 pr-6 space-y-4 text-lg text-slate-700 font-medium">
+                            <li>יצירת טבלת המרחקים והזמנים (המטריצה הסטטית).</li>
+                            <li>הגדרה מדוייקת של זמן מעבר בין התחנות השונות.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="bg-white border-2 border-emerald-500 rounded-xl shadow-lg flex flex-col overflow-hidden transform scale-105">
+                    <div class="bg-emerald-50 p-6 text-center border-b border-emerald-200">
+                        <h3 class="text-2xl font-bold mb-2 text-emerald-800">השקת Shadow Mode</h3>
+                        <span class="bg-emerald-600 text-white px-3 py-1 rounded text-sm font-semibold">אחריות: צוות מערכת + תפעול</span>
+                    </div>
+                    <div class="p-8 flex-grow">
+                        <ul class="list-disc pl-4 pr-6 space-y-4 text-lg text-slate-700 font-medium">
+                            <li>הרצת מנוע ה-AI על נתוני אמת במקביל לשיבוץ הידני שלכם.</li>
+                            <li>לצורך השוואת ביצועים וכיול המנוע לפני השקה רשמית.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= CONTROLS ================= -->
+        <div class="absolute bottom-4 left-0 right-0 flex justify-center items-center gap-6 px-10">
+            <button onclick="nextSlide()" class="w-12 h-12 rounded-full bg-blue-800 text-white hover:bg-blue-700 transition shadow-lg flex items-center justify-center text-xl">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <span id="counter" class="text-slate-500 font-bold text-lg px-4 py-1 bg-white rounded shadow-sm border">1 / 13</span>
+            <button onclick="prevSlide()" class="w-12 h-12 rounded-full bg-blue-800 text-white hover:bg-blue-700 transition shadow-lg flex items-center justify-center text-xl">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Logic -->
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        const counter = document.getElementById('counter');
+
+        function showSlide(index) {
+            slides.forEach(slide => slide.classList.remove('active'));
+            
+            if (index >= totalSlides) currentSlide = 0;
+            if (index < 0) currentSlide = totalSlides - 1;
+            
+            slides[currentSlide].classList.add('active');
+            counter.innerText = `${currentSlide + 1} / ${totalSlides}`;
+        }
+
+        // In RTL Hebrew, going Next naturally feels like moving to the Left arrow, Prev to Right.
+        function nextSlide() { currentSlide++; showSlide(currentSlide); }
+        function prevSlide() { currentSlide--; showSlide(currentSlide); }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') nextSlide();
+            if (e.key === 'ArrowRight') prevSlide();
+        });
+
+        // Initialize
+        showSlide(currentSlide);
+    </script>
+</body>
+</html>
