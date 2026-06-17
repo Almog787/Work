@@ -1,108 +1,108 @@
 function main(workbook: ExcelScript.Workbook) {
-  // התחלת מדידת זמן
+  // Start time measurement
   let startTime = new Date().getTime();
   
-  console.log("מתחיל בתהליך הסריקה (עמודות M,N -> O,P)...");
+  console.log("Starting scan process (Columns L,M -> N,O)...");
 
   const sheet = workbook.getActiveWorksheet();
   const usedRange = sheet.getUsedRange();
 
   if (!usedRange) {
-    console.log("הגיליון ריק. מסיים ריצה.");
+    console.log("Sheet is empty. Exiting.");
     return;
   }
 
-  // חישוב גודל הטווח
+  // Calculate range size
   const lastRowIndex = usedRange.getLastRow().getRowIndex();
-  // סך הכל שורות לעיבוד (מתחילים משורה 2, ולכן אינדקס 1)
+  // Total rows to process (starting from row 2, so index 1)
   const rowCount = lastRowIndex; 
 
   if (rowCount < 1) {
-    console.log("אין מספיק נתונים לעיבוד (פחות מ-2 שורות).");
+    console.log("Not enough data to process (less than 2 rows).");
     return;
   }
 
-  console.log(`נמצאו ${rowCount} שורות לעיבוד. טוען נתונים לזיכרון...`);
+  console.log(`Found ${rowCount} rows to process. Loading data to memory...`);
 
-  // --- שינוי הגדרת העמודות החדשות ---
-  // עמודות מקור: M (אינדקס 12), N (אינדקס 13)
-  // עמודות יעד: O (אינדקס 14), P (אינדקס 15)
+  // --- Define new column configuration ---
+  // Source columns: L (index 11), M (index 12)
+  // Target columns: N (index 13), O (index 14)
 
-  const sourceRange = sheet.getRangeByIndexes(1, 12, rowCount, 2); // עמודות מקור M, N
-  const targetRange = sheet.getRangeByIndexes(1, 14, rowCount, 2); // עמודות יעד O, P
+  const sourceRange = sheet.getRangeByIndexes(1, 11, rowCount, 2); // Source columns L, M
+  const targetRange = sheet.getRangeByIndexes(1, 13, rowCount, 2); // Target columns N, O
 
-  // טעינת הערכים
+  // Load values
   const sourceValues = sourceRange.getValues();
   const targetValues = targetRange.getValues();
 
-  // הגדרות לוגיקה
-  const zPattern = /z/i; // ביטוי רגולרי לחיפוש z (מתעלם מ-Case)
+  // Logic configurations
+  const zPattern = /z/i; // Regular expression to search for 'z' (case-insensitive)
   let hasChanges = false;
   
-  // מונים לסטטיסטיקה
+  // Counters for statistics
+  let countChangedN = 0;
   let countChangedO = 0;
-  let countChangedP = 0;
   
-  // דיווח כל 200 שורות
+  // Report every 200 rows
   const logBatchSize = 200; 
 
-  console.log("הנתונים נטענו בהצלחה, מתחיל בעיבוד השורות...");
+  console.log("Data loaded successfully, starting row processing...");
 
-  // לולאה ראשית
+  // Main loop
   for (let i = 0; i < rowCount; i++) {
     
-    // שליפת הערכים מהמערך בזיכרון
-    // אינדקס 0 במערך המקומי = העמודה השמאלית בטווח (O או M)
-    // אינדקס 1 במערך המקומי = העמודה הימנית בטווח (P או N)
+    // Fetch values from the array in memory
+    // Local array index 0 = Left column in range (L or N)
+    // Local array index 1 = Right column in range (M or O)
     
-    let valO = targetValues[i][0]; // הערך הנוכחי בעמודה O
-    let valP = targetValues[i][1]; // הערך הנוכחי בעמודה P
+    let valN = targetValues[i][0]; // Current value in column N
+    let valO = targetValues[i][1]; // Current value in column O
     let rowChanged = false;
 
-    // --- בדיקה עבור עמודה O (העתקה מ-M) ---
+    // --- Check for column N (Copy from L) ---
+    if (typeof valN === 'string' && zPattern.test(valN)) {
+      targetValues[i][0] = sourceValues[i][0]; // Copy from L to N
+      countChangedN++;
+      rowChanged = true;
+    }
+
+    // --- Check for column O (Copy from M) ---
     if (typeof valO === 'string' && zPattern.test(valO)) {
-      targetValues[i][0] = sourceValues[i][0]; // העתקה מ-M אל O
+      targetValues[i][1] = sourceValues[i][1]; // Copy from M to O
       countChangedO++;
       rowChanged = true;
     }
 
-    // --- בדיקה עבור עמודה P (העתקה מ-N) ---
-    if (typeof valP === 'string' && zPattern.test(valP)) {
-      targetValues[i][1] = sourceValues[i][1]; // העתקה מ-N אל P
-      countChangedP++;
-      rowChanged = true;
-    }
-
-    // סימון כללי שיש צורך בשמירה בסוף
+    // General flag for saving at the end
     if (rowChanged) {
       hasChanges = true;
     }
 
-    // הדפסת התקדמות לקונסול כל 200 שורות
+    // Print progress to console every 200 rows
     if ((i + 1) % logBatchSize === 0) {
-      console.log(`...מעבד... הושלמו ${i + 1} שורות מתוך ${rowCount}`);
+      console.log(`...Processing... Completed ${i + 1} rows out of ${rowCount}`);
     }
   }
 
-  // שלב השמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
+  // Save phase: write back to Excel only if a change occurred
   if (hasChanges) {
-    console.log("סיימתי עיבוד. כותב את השינויים חזרה לאקסל (עמודות O, P)...");
+    console.log("Processing finished. Writing changes back to Excel (Columns N, O)...");
     targetRange.setValues(targetValues);
   } else {
-    console.log("לא נמצאה האות 'z' באף תא בעמודות O או P. לא בוצעה כתיבה.");
+    console.log("The letter 'z' was not found in any cell in columns N or O. No writing performed.");
   }
 
-  // חישוב זמנים וסיכום
+  // Calculate time and summary
   let endTime = new Date().getTime();
-  let duration = (endTime - startTime) / 1000; // המרה לשניות
+  let duration = (endTime - startTime) / 1000; // Convert to seconds
 
   console.log("-----------------------------------------");
-  console.log("             סיכום ביצוע                 ");
+  console.log("             Execution Summary           ");
   console.log("-----------------------------------------");
-  console.log(`סה"כ שורות שנבדקו: ${rowCount}`);
-  console.log(`החלפות שבוצעו בעמודה O (מקור M): ${countChangedO}`);
-  console.log(`החלפות שבוצעו בעמודה P (מקור N): ${countChangedP}`);
-  console.log(`סה"כ החלפות: ${countChangedO + countChangedP}`);
-  console.log(`זמן ריצה כולל: ${duration} שניות`);
+  console.log(`Total rows checked: ${rowCount}`);
+  console.log(`Replacements made in column N (Source L): ${countChangedN}`);
+  console.log(`Replacements made in column O (Source M): ${countChangedO}`);
+  console.log(`Total replacements: ${countChangedN + countChangedO}`);
+  console.log(`Total run time: ${duration} seconds`);
   console.log("-----------------------------------------");
 }
