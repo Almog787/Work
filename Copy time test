@@ -2,7 +2,7 @@ function main(workbook: ExcelScript.Workbook) {
   // התחלת מדידת זמן
   let startTime = new Date().getTime();
   
-  console.log("מתחיל בתהליך הסריקה (עמודות L,M -> N,O)...");
+  console.log("מתחיל בתהליך הסריקה והעיצוב (עמודות L,M -> N,O)...");
 
   const sheet = workbook.getActiveWorksheet();
   const usedRange = sheet.getUsedRange();
@@ -24,19 +24,19 @@ function main(workbook: ExcelScript.Workbook) {
 
   console.log(`נמצאו ${rowCount} שורות לעיבוד. טוען נתונים לזיכרון...`);
 
-  // --- שינוי הגדרת העמודות החדשות ---
+  // --- הגדרת העמודות ---
   // עמודות מקור: L (אינדקס 11), M (אינדקס 12)
   // עמודות יעד: N (אינדקס 13), O (אינדקס 14)
 
   const sourceRange = sheet.getRangeByIndexes(1, 11, rowCount, 2); // עמודות מקור L, M
   const targetRange = sheet.getRangeByIndexes(1, 13, rowCount, 2); // עמודות יעד N, O
 
-  // טעינת הערכים
+  // טעינת הערכים למערכים כדי לחסוך זמן ריצה
   const sourceValues = sourceRange.getValues();
   const targetValues = targetRange.getValues();
 
   // הגדרות לוגיקה
-  const zPattern = /z/i; // ביטוי רגולרי לחיפוש z (מתעלם מ-Case)
+  const zPattern = /z/i; // ביטוי רגולרי לחיפוש z (מתעלם מאותיות גדולות/קטנות)
   let hasChanges = false;
   
   // מונים לסטטיסטיקה
@@ -46,14 +46,10 @@ function main(workbook: ExcelScript.Workbook) {
   // דיווח כל 200 שורות
   const logBatchSize = 200; 
 
-  console.log("הנתונים נטענו בהצלחה, מתחיל בעיבוד השורות...");
+  console.log("הנתונים נטענו בהצלחה, מתחיל בעיבוד השורות ועיצוב התאים...");
 
   // לולאה ראשית
   for (let i = 0; i < rowCount; i++) {
-    
-    // שליפת הערכים מהמערך בזיכרון
-    // אינדקס 0 במערך המקומי = העמודה השמאלית בטווח (N במקרה של היעד, L במקור)
-    // אינדקס 1 במערך המקומי = העמודה הימנית בטווח (O במקרה של היעד, M במקור)
     
     let valN = targetValues[i][0]; // הערך הנוכחי בעמודה N
     let valO = targetValues[i][1]; // הערך הנוכחי בעמודה O
@@ -62,6 +58,12 @@ function main(workbook: ExcelScript.Workbook) {
     // --- בדיקה עבור עמודה N (העתקה מ-L) ---
     if (typeof valN === 'string' && zPattern.test(valN)) {
       targetValues[i][0] = sourceValues[i][0]; // העתקה מ-L אל N
+      
+      // עיצוב התא: טקסט אדום ורקע ירוק בהיר
+      let cellN = targetRange.getCell(i, 0);
+      cellN.getFormat().getFont().setColor("#FF0000"); // אדום
+      cellN.getFormat().getFill().setColor("#90EE90"); // ירוק בהיר
+      
       countChangedN++;
       rowChanged = true;
     }
@@ -69,6 +71,12 @@ function main(workbook: ExcelScript.Workbook) {
     // --- בדיקה עבור עמודה O (העתקה מ-M) ---
     if (typeof valO === 'string' && zPattern.test(valO)) {
       targetValues[i][1] = sourceValues[i][1]; // העתקה מ-M אל O
+      
+      // עיצוב התא: טקסט אדום ורקע ירוק בהיר
+      let cellO = targetRange.getCell(i, 1);
+      cellO.getFormat().getFont().setColor("#FF0000"); // אדום
+      cellO.getFormat().getFill().setColor("#90EE90"); // ירוק בהיר
+      
       countChangedO++;
       rowChanged = true;
     }
@@ -86,10 +94,10 @@ function main(workbook: ExcelScript.Workbook) {
 
   // שלב השמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
   if (hasChanges) {
-    console.log("סיימתי עיבוד. כותב את השינויים חזרה לאקסל (עמודות N, O)...");
+    console.log("סיימתי עיבוד ועיצוב. כותב את הערכים החדשים חזרה לאקסל (עמודות N, O)...");
     targetRange.setValues(targetValues);
   } else {
-    console.log("לא נמצאה האות 'z' באף תא בעמודות N או O. לא בוצעה כתיבה.");
+    console.log("לא נמצאה האות 'z' באף תא בעמודות N או O. לא בוצעה העתקה או עיצוב.");
   }
 
   // חישוב זמנים וסיכום
@@ -100,9 +108,9 @@ function main(workbook: ExcelScript.Workbook) {
   console.log("             סיכום ביצוע                 ");
   console.log("-----------------------------------------");
   console.log(`סה"כ שורות שנבדקו: ${rowCount}`);
-  console.log(`החלפות שבוצעו בעמודה N (מקור L): ${countChangedN}`);
-  console.log(`החלפות שבוצעו בעמודה O (מקור M): ${countChangedO}`);
-  console.log(`סה"כ החלפות: ${countChangedN + countChangedO}`);
+  console.log(`החלפות שבוצעו וצובעו בעמודה N: ${countChangedN}`);
+  console.log(`החלפות שבוצעו וצובעו בעמודה O: ${countChangedO}`);
+  console.log(`סה"כ תאים שעוצבו: ${countChangedN + countChangedO}`);
   console.log(`זמן ריצה כולל: ${duration} שניות`);
   console.log("-----------------------------------------");
 }
