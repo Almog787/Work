@@ -1,8 +1,6 @@
 function main(workbook: ExcelScript.Workbook) {
-  // התחלת מדידת זמן
   let startTime = new Date().getTime();
-  
-  console.log("מתחיל בתהליך הסריקה והעיצוב (עמודות L,M -> N,O)...");
+  console.log("מתחיל בתהליך הסריקה (עמודות L,M -> N,O)...");
 
   const sheet = workbook.getActiveWorksheet();
   const usedRange = sheet.getUsedRange();
@@ -12,9 +10,7 @@ function main(workbook: ExcelScript.Workbook) {
     return;
   }
 
-  // חישוב גודל הטווח
   const lastRowIndex = usedRange.getLastRow().getRowIndex();
-  // סך הכל שורות לעיבוד (מתחילים משורה 2, ולכן אינדקס 1)
   const rowCount = lastRowIndex; 
 
   if (rowCount < 1) {
@@ -22,95 +18,77 @@ function main(workbook: ExcelScript.Workbook) {
     return;
   }
 
-  console.log(`נמצאו ${rowCount} שורות לעיבוד. טוען נתונים לזיכרון...`);
+  const sourceRange = sheet.getRangeByIndexes(1, 11, rowCount, 2); // L, M
+  const targetRange = sheet.getRangeByIndexes(1, 13, rowCount, 2); // N, O
 
-  // --- הגדרת העמודות ---
-  // עמודות מקור: L (אינדקס 11), M (אינדקס 12)
-  // עמודות יעד: N (אינדקס 13), O (אינדקס 14)
-
-  const sourceRange = sheet.getRangeByIndexes(1, 11, rowCount, 2); // עמודות מקור L, M
-  const targetRange = sheet.getRangeByIndexes(1, 13, rowCount, 2); // עמודות יעד N, O
-
-  // טעינת הערכים למערכים כדי לחסוך זמן ריצה
   const sourceValues = sourceRange.getValues();
   const targetValues = targetRange.getValues();
 
-  // הגדרות לוגיקה
-  const zPattern = /z/i; // ביטוי רגולרי לחיפוש z (מתעלם מאותיות גדולות/קטנות)
+  const zPattern = /z/i; 
   let hasChanges = false;
   
-  // מונים לסטטיסטיקה
-  let countChangedN = 0;
-  let countChangedO = 0;
-  
-  // דיווח כל 200 שורות
-  const logBatchSize = 200; 
+  // מערכים לשמירת אינדקסים של השורות שהשתנו
+  let changedRowsN: number[] = [];
+  let changedRowsO: number[] = [];
 
-  console.log("הנתונים נטענו בהצלחה, מתחיל בעיבוד השורות ועיצוב התאים...");
-
-  // לולאה ראשית
+  // 1. שלב הסריקה וההעתקה בזיכרון
   for (let i = 0; i < rowCount; i++) {
-    
-    let valN = targetValues[i][0]; // הערך הנוכחי בעמודה N
-    let valO = targetValues[i][1]; // הערך הנוכחי בעמודה O
-    let rowChanged = false;
+    let valN = targetValues[i][0];
+    let valO = targetValues[i][1]; 
 
-    // --- בדיקה עבור עמודה N (העתקה מ-L) ---
+    // עמודה N
     if (typeof valN === 'string' && zPattern.test(valN)) {
-      targetValues[i][0] = sourceValues[i][0]; // העתקה מ-L אל N
-      
-      // עיצוב התא: טקסט אדום ורקע ירוק בהיר
-      let cellN = targetRange.getCell(i, 0);
-      cellN.getFormat().getFont().setColor("#FF0000"); // אדום
-      cellN.getFormat().getFill().setColor("#90EE90"); // ירוק בהיר
-      
-      countChangedN++;
-      rowChanged = true;
-    }
-
-    // --- בדיקה עבור עמודה O (העתקה מ-M) ---
-    if (typeof valO === 'string' && zPattern.test(valO)) {
-      targetValues[i][1] = sourceValues[i][1]; // העתקה מ-M אל O
-      
-      // עיצוב התא: טקסט אדום ורקע ירוק בהיר
-      let cellO = targetRange.getCell(i, 1);
-      cellO.getFormat().getFont().setColor("#FF0000"); // אדום
-      cellO.getFormat().getFill().setColor("#90EE90"); // ירוק בהיר
-      
-      countChangedO++;
-      rowChanged = true;
-    }
-
-    // סימון כללי שיש צורך בשמירה בסוף
-    if (rowChanged) {
+      targetValues[i][0] = sourceValues[i][0]; 
+      changedRowsN.push(i); // שומרים את מספר השורה ששונתה
       hasChanges = true;
     }
 
-    // הדפסת התקדמות לקונסול כל 200 שורות
-    if ((i + 1) % logBatchSize === 0) {
-      console.log(`...מעבד... הושלמו ${i + 1} שורות מתוך ${rowCount}`);
+    // עמודה O
+    if (typeof valO === 'string' && zPattern.test(valO)) {
+      targetValues[i][1] = sourceValues[i][1]; 
+      changedRowsO.push(i); // שומרים את מספר השורה ששונתה
+      hasChanges = true;
     }
   }
 
-  // שלב השמירה: כותבים לאקסל רק אם באמת בוצע שינוי כלשהו
+  // 2. שלב הכתיבה והעיצוב
   if (hasChanges) {
-    console.log("סיימתי עיבוד ועיצוב. כותב את הערכים החדשים חזרה לאקסל (עמודות N, O)...");
+    console.log("כותב את הערכים החדשים חזרה לאקסל...");
+    // כותבים את הנתונים תחילה כדי שלא ידרסו את העיצוב
     targetRange.setValues(targetValues);
+    
+    console.log("מעדכן עיצוב תאים (טקסט אדום, רקע ירוק בהיר)...");
+    
+    // צובעים את התאים שהשתנו בעמודה N
+    for (let rowIndex of changedRowsN) {
+      let cellN = targetRange.getCell(rowIndex, 0);
+      cellN.getFormat().getFont().setColor("#FF0000"); // טקסט אדום
+      cellN.getFormat().getFill().setColor("#90EE90"); // רקע ירוק בהיר
+    }
+    
+    // צובעים את התאים שהשתנו בעמודה O
+    for (let rowIndex of changedRowsO) {
+      let cellO = targetRange.getCell(rowIndex, 1);
+      cellO.getFormat().getFont().setColor("#FF0000"); // טקסט אדום
+      cellO.getFormat().getFill().setColor("#90EE90"); // רקע ירוק בהיר
+    }
+    
+    console.log("העיצוב הוחל בהצלחה.");
   } else {
-    console.log("לא נמצאה האות 'z' באף תא בעמודות N או O. לא בוצעה העתקה או עיצוב.");
+    console.log("לא נמצאה האות 'z'. לא בוצעה העתקה או עיצוב.");
   }
 
   // חישוב זמנים וסיכום
   let endTime = new Date().getTime();
-  let duration = (endTime - startTime) / 1000; // המרה לשניות
+  let duration = (endTime - startTime) / 1000; 
 
   console.log("-----------------------------------------");
   console.log("             סיכום ביצוע                 ");
   console.log("-----------------------------------------");
   console.log(`סה"כ שורות שנבדקו: ${rowCount}`);
-  console.log(`החלפות שבוצעו וצובעו בעמודה N: ${countChangedN}`);
-  console.log(`החלפות שבוצעו וצובעו בעמודה O: ${countChangedO}`);
-  console.log(`סה"כ תאים שעוצבו: ${countChangedN + countChangedO}`);
+  console.log(`החלפות שבוצעו וצובעו בעמודה N: ${changedRowsN.length}`);
+  console.log(`החלפות שבוצעו וצובעו בעמודה O: ${changedRowsO.length}`);
+  console.log(`סה"כ תאים שטופלו: ${changedRowsN.length + changedRowsO.length}`);
   console.log(`זמן ריצה כולל: ${duration} שניות`);
   console.log("-----------------------------------------");
 }
