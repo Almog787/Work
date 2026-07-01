@@ -1,0 +1,13 @@
+Date,Station_Name,Station_Type,Required_Reviews
+2026-07-01,Allenby,Underground,4
+2026-07-01,Beilinson,Aboveground_Exception,3
+2026-07-01,Shenkar,Aboveground,5
+2026-07-01,Komemiyut,Terminus,2
+2026-07-02,Aharonovitch,Underground,3
+2026-07-02,Arlozorov,Underground,4
+2026-07-02,Bialik,Aboveground,6
+2026-07-02,Kiryat Arye,Terminus,2
+2026-07-03,Ben Gurion,Underground,5
+2026-07-03,Beilinson,Aboveground_Exception,2
+2026-07-03,Elifelet,Aboveground,4
+2026-07-03,Central Station,Underground,3
