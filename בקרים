@@ -1,0 +1,14 @@
+ID,Name,Role_Type,Residential_Area,Skills
+101,Israel Israeli,Senior Inspector,Petah Tikva,Underground;Aboveground;Terminus
+102,Moshe Cohen,Inspector,Tel Aviv,Aboveground
+103,Avraham Levi,Inspector,Bnei Brak,Underground;Aboveground
+104,Rachel Levin,Inspector,Petah Tikva,Underground;Terminus
+105,David Mizrahi,Inspector,Ramat Gan,Aboveground;Terminus
+106,Michal Avraham,Inspector,Bat Yam,Underground;Aboveground
+107,Yosef Haim,Inspector,Jaffa,Aboveground
+108,Sarah Friedman,Inspector,Petah Tikva,Underground;Aboveground;Terminus
+109,Daniel Katz,Inspector,Tel Aviv,Underground;Terminus
+110,Anat Rosen,Inspector,Ramat Gan,Aboveground
+111,Gad Bauman,Inspector,Givatayim,Underground;Aboveground
+112,Roni Levi,Inspector,Petah Tikva,Aboveground;Terminus
+
