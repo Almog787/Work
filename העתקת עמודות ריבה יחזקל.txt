@@ -1,0 +1,94 @@
+function main(workbook: ExcelScript.Workbook) {
+  let startTime = new Date().getTime();
+  console.log("מתחיל בתהליך הסריקה (עמודות L,M -> N,O)...");
+
+  const sheet = workbook.getActiveWorksheet();
+  const usedRange = sheet.getUsedRange();
+
+  if (!usedRange) {
+    console.log("הגיליון ריק. מסיים ריצה.");
+    return;
+  }
+
+  const lastRowIndex = usedRange.getLastRow().getRowIndex();
+  const rowCount = lastRowIndex;
+
+  if (rowCount < 1) {
+    console.log("אין מספיק נתונים לעיבוד (פחות מ-2 שורות).");
+    return;
+  }
+
+  const sourceRange = sheet.getRangeByIndexes(1, 11, rowCount, 2); // L, M
+  const targetRange = sheet.getRangeByIndexes(1, 13, rowCount, 2); // N, O
+
+  const sourceValues = sourceRange.getValues();
+  const targetValues = targetRange.getValues();
+
+  const zPattern = /z/i;
+  let hasChanges = false;
+
+  // מערכים לשמירת אינדקסים של השורות שהשתנו
+  let changedRowsN: number[] = [];
+  let changedRowsO: number[] = [];
+
+  // 1. שלב הסריקה וההעתקה בזיכרון
+  for (let i = 0; i < rowCount; i++) {
+    let valN = targetValues[i][0];
+    let valO = targetValues[i][1];
+
+    // עמודה N
+    if (typeof valN === 'string' && zPattern.test(valN)) {
+      targetValues[i][0] = sourceValues[i][0];
+      changedRowsN.push(i); // שומרים את מספר השורה ששונתה
+      hasChanges = true;
+    }
+
+    // עמודה O
+    if (typeof valO === 'string' && zPattern.test(valO)) {
+      targetValues[i][1] = sourceValues[i][1];
+      changedRowsO.push(i); // שומרים את מספר השורה ששונתה
+      hasChanges = true;
+    }
+  }
+
+  // 2. שלב הכתיבה והעיצוב
+  if (hasChanges) {
+    console.log("כותב את הערכים החדשים חזרה לאקסל...");
+    // כותבים את הנתונים תחילה כדי שלא ידרסו את העיצוב
+    targetRange.setValues(targetValues);
+
+    console.log("מעדכן עיצוב תאים (טקסט אדום, רקע ירוק בהיר)...");
+
+    // צובעים את התאים שהשתנו בעמודה N
+    for (let rowIndex of changedRowsN) {
+      let cellN = targetRange.getCell(rowIndex, 0);
+      cellN.getFormat().getFont().setColor("#FF0000"); // טקסט אדום
+      cellN.getFormat().getFill().setColor("#FC8EF7"); // רקע ירוק בהיר
+    }
+
+    // צובעים את התאים שהשתנו בעמודה O
+    for (let rowIndex of changedRowsO) {
+      let cellO = targetRange.getCell(rowIndex, 1);
+      cellO.getFormat().getFont().setColor("#FF0000"); // טקסט אדום
+      cellO.getFormat().getFill().setColor("#FC8EF7"); // רקע ירוק בהיר
+    }
+
+    console.log("העיצוב הוחל בהצלחה.");
+  } else {
+    console.log("לא נמצאה האות 'z'. לא בוצעה העתקה או עיצוב.");
+  }
+
+  // חישוב זמנים וסיכום
+  let endTime = new Date().getTime();
+  let duration = (endTime - startTime) / 1000;
+
+  console.log("-----------------------------------------");
+  console.log("             סיכום ביצוע                 ");
+  console.log("-----------------------------------------");
+  console.log(`סה"כ שורות שנבדקו: ${rowCount}`);
+  console.log(`החלפות שבוצעו וצובעו בעמודה N: ${changedRowsN.length}`);
+  console.log(`החלפות שבוצעו וצובעו בעמודה O: ${changedRowsO.length}`);
+  console.log(`סה"כ תאים שטופלו: ${changedRowsN.length + changedRowsO.length}`);
+  console.log(`זמן ריצה כולל: ${duration} שניות`);
+  console.log("-----------------------------------------");
+}
